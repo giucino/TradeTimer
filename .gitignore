@@ -1,0 +1,16 @@
+# .NET build output
+bin/
+obj/
+
+# Visual Studio / Rider
+.vs/
+.idea/
+*.user
+*.suo
+
+# Claude Code lokale Config
+.claude/
+
+# OS
+Thumbs.db
+desktop.ini
