@@ -13,6 +13,7 @@
   }
   h1 { font-size: 26px; margin: 0 0 4px; color: #fff; }
   h2 { font-size: 20px; margin: 34px 0 10px; color: #fff; border-bottom: 1px solid #2a2e38; padding-bottom: 6px; }
+  h3 { font-size: 16px; margin: 22px 0 6px; color: #cfe7f2; }
   .sub { color: #8b94a6; margin: 0 0 20px; }
   code { background: #20242e; padding: 1px 6px; border-radius: 4px; font-family: Consolas, monospace; font-size: 13px; color: #e6c07b; }
   table { border-collapse: collapse; width: 100%; margin: 12px 0; }
@@ -21,6 +22,7 @@
   td:first-child { white-space: nowrap; color: #eaeef6; font-weight: 600; }
   .red { color: #e84c4c; font-weight: 600; }
   .green { color: #46cf64; font-weight: 600; }
+  .cyan { color: #22d3ee; font-weight: 600; }
   .note { background: #1b2530; border-left: 3px solid #4a90d9; padding: 10px 14px; border-radius: 4px; margin: 14px 0; }
   .warn { background: #2a2118; border-left: 3px solid #d9a14a; padding: 10px 14px; border-radius: 4px; margin: 14px 0; }
   ul { margin: 6px 0 6px 0; padding-left: 22px; }
@@ -31,51 +33,103 @@
 <body>
 
 <h1>Trade Timer</h1>
-<p class="sub">Zeigt, wie lange die aktuelle Position offen ist — mit Farbwechsel ab einer Ziel-Haltedauer. Rein informativ.</p>
+<p class="sub">Live-Haltedauer-HUD + Scalping-/Payout-Auswertung für Futures-Prop-Trading (Referenz: IQ Capital). Rein informativ — kein Handelssignal.</p>
 
-<h2>Was der Indikator macht</h2>
-<p>
-Ein kompaktes HUD zeigt die Haltedauer der offenen Position im Format <code>MM:SS</code>:
-</p>
-<ul>
-  <li><span class="red">Rot</span> = unter der Ziel-Sekundenzahl</li>
-  <li><span class="green">Grün</span> = über der Ziel-Sekundenzahl</li>
-</ul>
 <div class="note">
-Gedacht als Hilfsmittel für Prop-Firm-Regeln (z.B. Mindest-/Ziel-Haltedauer): auf einen Blick sehen, ob eine Position
-lange genug offen war.
+Zwei Werkzeuge in einem Indikator: ein <strong>Live-Timer</strong> für die offene Position und ein
+<strong>Statistik-Panel</strong>, das alle Round-Trip-Trades eines Zeitraums auswertet und die
+<strong>Payout-Bedingungen</strong> live prüft.
 </div>
 
-<h2>Wie Entry / Exit / Flip erkannt werden</h2>
-<p>
-Über das <strong>signierte</strong> <code>Position.Volume</code> (Long &gt; 0, Short &lt; 0, Flat = 0):
-</p>
+<h2>1) Live-Timer-HUD</h2>
+<p>Kompaktes HUD mit der Haltedauer der offenen Position im Format <code>MM:SS</code> (Ring-Pill mit Fortschritt zur 15-s-Marke):</p>
+<ul>
+  <li><span class="red">Rot + „!"</span> = unter der Scalping-Mindestlänge (15 s) — warnt vor zu frühem Schließen.</li>
+  <li><span class="green">Grün</span> = über der Mindestlänge.</li>
+</ul>
+
+<h3>Erkennung von Entry / Exit / Flip / Pyramiding</h3>
+<p>Über das <strong>signierte</strong> <code>Position.Volume</code> (Long &gt; 0, Short &lt; 0, Flat = 0):</p>
 <ul>
   <li><strong>Entry</strong> aus Flat → Timer startet (Zeitstempel = Marktzeit).</li>
   <li><strong>Pyramiding / Teilschließung</strong> (gleiche Richtung) → Timer läuft weiter (erster Entry bleibt).</li>
-  <li><strong>Flip</strong> (Long↔Short ohne Flat, Vorzeichenwechsel) → Timer wird neu gestartet.</li>
+  <li><strong>Flip</strong> (Long↔Short ohne Flat) → Timer wird neu gestartet.</li>
   <li><strong>Flat</strong> (Position zu) → Timer aus.</li>
 </ul>
+<p>Zeitquelle ist die <strong>Marktzeit</strong> (<code>candle.LastTime</code>), nicht die Wanduhr — korrekt im Replay und unabhängig von UI-Hängern.</p>
+
+<h2>2) Scalping-/Payout-Panel</h2>
 <p>
-Als Zeitquelle dient die <strong>Marktzeit</strong> (<code>candle.LastTime</code>), nicht die Wanduhr — damit korrekt im
-Replay und unabhängig von UI-Hängern.
+Liest die fertig gematchten Round-Trips aus ATAS' <code>TradingStatisticsProvider</code> (<code>HistoryMyTrades</code>)
+und wertet sie für den gewählten Zeitraum und das gewählte Konto aus.
 </p>
+<ul>
+  <li><strong>Netto-PnL</strong> (Brutto − Kommission) sowie getrennte <strong>Gewinne / Verluste</strong>.</li>
+  <li>Gruppen <strong>&lt;15s / &gt;15s</strong> mit Gewinn-Summen und %-Anteil an den Gesamtgewinnen.</li>
+  <li><strong>Profit-Split-Leiste</strong> (&gt;15 s vs. &lt;15 s) und eine scrollbare Trade-Tabelle.</li>
+  <li><strong>Auszahlbar-Schätzung</strong> = <code>min(Cap, Netto × 50 % × 90 %)</code>.</li>
+  <li><strong>CSV-Export</strong> aller Trades in den Downloads-Ordner.</li>
+  <li><strong>Zeitversatz</strong> (Standard +2 h) → angezeigte Zeiten in IQ-Capital-Zeit.</li>
+</ul>
+
+<h3>Payout-Check</h3>
+<p>Ampel-Badge <span class="green">„PAYOUT ERLAUBT"</span> / <span class="red">„PAYOUT GESPERRT"</span>, grün nur wenn <em>alle</em> Bedingungen erfüllt sind:</p>
+<table>
+  <tr><th>Bedingung</th><th>Regel</th><th>Anzeige (ist / Soll)</th></tr>
+  <tr><td>Scalping (Trades)</td><td>≥ 50 % aller Trades &gt; 15 s</td><td><code>Trades &gt;15s: 82 / Soll 55 · 74,5 %</code></td></tr>
+  <tr><td>Scalping (Profite)</td><td>≥ 50 % der Profite aus &gt; 15 s</td><td><code>Profite &gt;15s: … / Soll … · %</code></td></tr>
+  <tr><td>Consistency*</td><td>bester Tag ≤ 30 % des Gesamtprofits</td><td><code>Best-Day · %</code> + nötiger Gesamtgewinn</td></tr>
+  <tr><td>Sessions</td><td>10 aktive Handelstage</td><td><code>Sessions X/10</code> (Punkte)</td></tr>
+</table>
+<p class="sub">* Consistency-Formel: <em>höchster Tagesgewinn ÷ 30 % = benötigter Gesamtgewinn</em>. Gilt nur für Funded/Instant, nicht in der Evaluation.</p>
+
+<h3>Konto-Erkennung (automatisch)</h3>
+<p>Aus der Konto-ID werden Typ und Größe gelesen und Regeln/Werte passend gesetzt:</p>
+<table>
+  <tr><th>Konto-ID</th><th>Typ</th><th>Anzeige</th></tr>
+  <tr><td>IQF<span class="cyan">EV</span>…</td><td>Evaluation</td><td>Profit-Target-Fortschritt</td></tr>
+  <tr><td>IQF<span class="cyan">IF</span>…</td><td>Instant Funding</td><td>Payout-Check</td></tr>
+  <tr><td>IQF<span class="cyan">FN</span>…</td><td>Funded</td><td>Payout-Check</td></tr>
+</table>
+<table>
+  <tr><th>Größe (in der ID)</th><th>Profit-Target (Eval)</th><th>Cap (Max-Auszahlung)</th></tr>
+  <tr><td>50K</td><td>3.000</td><td>1.500</td></tr>
+  <tr><td>100K</td><td>6.000</td><td>2.000</td></tr>
+  <tr><td>200K</td><td>12.000</td><td>~2.500 *</td></tr>
+</table>
+<p class="sub">Target = 6 % der Kontogröße. *200k-Cap noch zu verifizieren. Alle Werte manuell überschreibbar (Auto-Schalter aus).</p>
+
+<h3>Bedienung im Chart</h3>
+<ul>
+  <li><strong>Kopfzeile ziehen</strong> → Panel verschieben.</li>
+  <li><strong>Klick auf die Kopfzeile</strong> → ein-/ausklappen.</li>
+  <li><strong>Mausrad</strong> über dem Panel → Trade-Liste scrollen.</li>
+</ul>
 
 <h2>Einstellungen</h2>
 <table>
-  <tr><th>Gruppe</th><th>Einstellung</th></tr>
-  <tr><td>Einstellungen</td><td>Ziel-Sekunden (Farbwechsel-Schwelle), Schriftgröße</td></tr>
-  <tr><td>Farben</td><td>unter Ziel / über Ziel / Hintergrund</td></tr>
-  <tr><td>Position</td><td>Unten links/rechts, Abstand X/Y vom Rand</td></tr>
+  <tr><th>Gruppe</th><th>Inhalt</th></tr>
+  <tr><td>Timer</td><td>Ziel-Sekunden, 15-s-Warnung, Schriftgröße, Farben, Position/Abstände</td></tr>
+  <tr><td>Daten &amp; Konto</td><td>Auswertung ab, Reset, Kontotyp, Auto-Cap/Target, Konto-/Symbol-Filter, Zeitversatz, Kommission, CSV-Export</td></tr>
+  <tr><td>Payout-Regeln</td><td>Mindestlänge (15 s), Scalping-Schwelle (50 %), Sessions (10), Consistency (30 %), Profit-Split (90 %), Auszahlungs-Cap, Profit-Target, 100 %-Freibetrag</td></tr>
+  <tr><td>Panel</td><td>Panel ein/aus, Schriftgröße, Abstände</td></tr>
 </table>
 
+<h2>Build &amp; Installation</h2>
+<ul>
+  <li>TargetFramework <code>net10.0-windows</code>, ATAS-DLLs per HintPath referenziert.</li>
+  <li><code>dotnet build -c Release</code>, dann <code>TradeTimer.dll</code> nach <code>%APPDATA%\ATAS\Indicators\</code> (und <code>%APPDATA%\ATAS X\Indicators\</code>) kopieren.</li>
+  <li><strong>Hot-Reload:</strong> Die DLL lässt sich bei laufendem ATAS überschreiben; ein Klick auf den „Indikatoren neu laden"-Hinweis lädt die neue Version <strong>ohne Neustart</strong>.</li>
+</ul>
+
 <div class="warn">
-Nur bei <strong>offener Position</strong> sichtbar (Live-Account-Position; im Replay/Backtest gibt es keine). In
-totstillem Markt ohne neue Ticks tickt die Sekundenanzeige evtl. erst beim nächsten Tick weiter.
+Der <strong>Timer</strong> ist nur bei offener Position sichtbar; das <strong>Panel</strong> auch im Flat-Zustand.
+Für die Auswertung muss ATAS die Trade-Historie des Zeitraums geladen haben.
+<strong>Kein Handelssignal, keine Anlageberatung</strong> — Nutzung auf eigenes Risiko.
 </div>
 
 <p class="sub" style="margin-top:40px;">
-<span class="tag">Eigenentwicklung</span> Teil eines ATAS-Orderflow-Projekts (Hilfs-Tool für Prop-Firm-Haltedauer).
+<span class="tag">Eigenentwicklung</span> Teil eines ATAS-Orderflow-Projekts. „IQ Capital" dient nur als Referenz für die abgebildeten Regeln.
 </p>
 
 </body>
