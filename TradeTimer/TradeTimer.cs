@@ -45,7 +45,8 @@ namespace TradeTimer
         private int _statsOffsetX = 20;
         private int _statsOffsetY = 20;
         private int _statsFontSize = 13;
-        private int _timeOffsetHours = 2;            // Anzeige-Versatz zu IQ Capital (ATAS+2h)
+        private bool _autoLocalTime = true;          // ATAS-UTC -> lokale Zeit (Sommer/Winter automatisch)
+        private int _timeOffsetHours = 2;            // manueller Versatz (nur wenn Auto aus)
         private bool _subtractCommission = true;     // PnL netto = brutto - Kommission
         private int _payoutThresholdPct = 50;        // IQ: >=50% Trades UND >=50% Profite aus >15s
         private int _requiredSessions = 10;          // IQ: erste Auszahlung nach 10 aktiven Tagen
@@ -81,8 +82,11 @@ namespace TradeTimer
         private int _lastStatsBar = -1;
         private string? _lastCsvPath;
         private string? _lastError;
-        private bool _collapsed;                  // Klick auf Kopfzeile klappt auf/zu
-        private Rectangle _headerHitRect;         // klickbare Kopfzeile (aus letztem Render)
+        private bool _collapsed;                  // Klick auf Titel klappt Detail auf/zu
+        private int _activeTab = 1;               // 0=Übersicht 1=Payout 2=Trades
+        private readonly Rectangle[] _tabRects = new Rectangle[3];
+        private Rectangle _titleHitRect;          // Titelzeile -> Collapse
+        private Rectangle _headerHitRect;         // gesamter Kopf -> Drag
         private Rectangle _panelRect;             // gesamtes Panel (Hit-Test fuer Wheel)
         private int _scrollOffset;                // Scroll-Position im Detailteil (in Zeilen)
         private bool _dragging;                   // Panel wird gerade per Drag verschoben
@@ -91,6 +95,18 @@ namespace TradeTimer
         private int _dragOrigOffX, _dragOrigOffY; // Panel-Offsets bei Drag-Start
         private int _lastBoxW;                     // Panelbreite aus letztem Render (Clamping)
         private int _lastMouseX, _lastMouseY;      // letzte Mausposition (fuer Wheel-Hit-Test)
+
+        // ── Schwebendes Fenster (Variante A: zusaetzlich zum Chart-Panel) ──
+        private bool _showWindow;                  // Fenster oeffnen
+        private bool _windowTopmost = true;        // immer im Vordergrund
+        private PanelWindow? _window;              // WPF-Fenster (auf UI-Thread)
+        private int _winTab = 1;                   // aktiver Reiter im Fenster (eigener Zustand)
+        private int _winScroll;                    // Trades-Scroll im Fenster (eigener Zustand)
+        private int _winBoxW, _winBoxH;            // gerenderte Panel-Groesse (Fenster)
+        private readonly Rectangle[] _winTabRects = new Rectangle[3];
+        private Rectangle _winHeaderRect;          // Kopf-Trefferbereich im Fenster (Drag)
+        private Rectangle _winCloseRect;           // X-Trefferbereich im Fenster
+        private int _winLastTick;                  // Render-Drossel (ms)
 
         // ── Design-Palette (statisch, kein Per-Frame-Alloc) ────────────
         private static readonly Color CBg        = Color.FromArgb(252, 11, 16, 23);
@@ -290,7 +306,7 @@ namespace TradeTimer
             set { _accountId = value?.Trim() ?? ""; _historyRequested = false; RecalcStats(); RedrawChart(); }
         }
 
-        [Display(Name = "CSV exportieren", GroupName = "Daten & Konto", Order = 20,
+        [Display(Name = "CSV exportieren", GroupName = "Daten & Konto", Order = 21,
                  Description = "Schreibt alle Trades des Zeitraums als CSV in den Downloads-Ordner " +
                                "(Spalten: Zeit, Symbol, Richtung, Dauer, Brutto, Kommission, Netto). " +
                                "Haken setzen = exportieren; springt zurueck.")]
@@ -337,14 +353,41 @@ namespace TradeTimer
             set { _statsOffsetY = value; RedrawChart(); }
         }
 
-        [Display(Name = "Zeitversatz Std. (IQ Capital)", GroupName = "Daten & Konto", Order = 18,
-                 Description = "Stunden, die zur ATAS-Zeit addiert werden, damit die angezeigten " +
-                               "Trade-Zeiten zu IQ Capital passen (z.B. +2). Wirkt auf Panel und CSV.")]
+        [Display(Name = "Als Fenster öffnen", GroupName = "Panel", Order = 54,
+                 Description = "Öffnet ZUSÄTZLICH ein schwebendes Fenster, das du frei platzieren kannst " +
+                               "(auch auf einem 2. Monitor). Das Chart-Panel bleibt unabhängig davon.")]
+        public bool ShowWindow
+        {
+            get => _showWindow;
+            set { _showWindow = value; if (!value) CloseWindow(); RedrawChart(); }
+        }
+
+        [Display(Name = "Fenster immer im Vordergrund", GroupName = "Panel", Order = 55,
+                 Description = "Hält das schwebende Fenster über anderen Fenstern (Topmost).")]
+        public bool WindowTopmost
+        {
+            get => _windowTopmost;
+            set { _windowTopmost = value; ApplyTopmost(); }
+        }
+
+        [Display(Name = "Lokalzeit automatisch", GroupName = "Daten & Konto", Order = 18,
+                 Description = "An = ATAS-UTC wird in deine Systemzeitzone gewandelt (Sommer-/Winterzeit " +
+                               "automatisch). Passt ganzjaehrig zu IQ Capital, kein manuelles Umstellen. " +
+                               "Aus = fester 'Zeitversatz Std.' unten.")]
+        public bool AutoLocalTime
+        {
+            get => _autoLocalTime;
+            set { _autoLocalTime = value; RecalcStats(); RedrawChart(); }
+        }
+
+        [Display(Name = "Zeitversatz Std. (manuell)", GroupName = "Daten & Konto", Order = 19,
+                 Description = "Fester Versatz zur ATAS-UTC-Zeit (z.B. +2 = MESZ Sommer, +1 = MEZ Winter). " +
+                               "Nur wirksam wenn 'Lokalzeit automatisch' AUS ist.")]
         [Range(-12, 12)]
         public int TimeOffsetHours
         {
             get => _timeOffsetHours;
-            set { _timeOffsetHours = Math.Clamp(value, -12, 12); RedrawChart(); }
+            set { _timeOffsetHours = Math.Clamp(value, -12, 12); RecalcStats(); RedrawChart(); }
         }
 
         [Display(Name = "Scalping-Schwelle (%)", GroupName = "Payout-Regeln", Order = 31,
@@ -407,7 +450,7 @@ namespace TradeTimer
             set { _evalKeyword = value?.Trim() ?? ""; RedrawChart(); }
         }
 
-        [Display(Name = "Profit-Target Eval (EUR)", GroupName = "Payout-Regeln", Order = 37,
+        [Display(Name = "Profit-Target Eval (USD)", GroupName = "Payout-Regeln", Order = 37,
                  Description = "Profit-Ziel der Evaluation (Standard 6000; je nach Tier anpassen). " +
                                "Wird im Evaluation-Modus als Fortschritt angezeigt.")]
         [Range(0, 1000000)]
@@ -437,7 +480,7 @@ namespace TradeTimer
             set { _withdrawCapPct = Math.Clamp(value, 1, 100); RedrawChart(); }
         }
 
-        [Display(Name = "Max. Auszahlung (EUR, 0=aus)", GroupName = "Payout-Regeln", Order = 36,
+        [Display(Name = "Max. Auszahlung (USD, 0=aus)", GroupName = "Payout-Regeln", Order = 36,
                  Description = "Account-Cap pro Auszahlung (IQ: 100k=2000, 50k=1500). Deckelt die " +
                                "'auszahlbar'-Schaetzung. 0 = kein Cap.")]
         [Range(0, 1000000)]
@@ -447,8 +490,8 @@ namespace TradeTimer
             set { _maxPayout = Math.Max(0, value); RedrawChart(); }
         }
 
-        [Display(Name = "100%-Freibetrag (EUR, 0=aus)", GroupName = "Payout-Regeln", Order = 38,
-                 Description = "OPTIONAL: erste X EUR der Auszahlungsbasis zu 100% (statt Split). Steht NICHT " +
+        [Display(Name = "100%-Freibetrag (USD, 0=aus)", GroupName = "Payout-Regeln", Order = 38,
+                 Description = "OPTIONAL: erste X USD der Auszahlungsbasis zu 100% (statt Split). Steht NICHT " +
                                "in den offiziellen IQ-Auszahlungsregeln (dort flat 90%); nur falls dein Konto " +
                                "das hat. 0 = aus (empfohlen).")]
         [Range(0, 1000000)]
@@ -468,7 +511,7 @@ namespace TradeTimer
             set { _timerScalpWarn = value; RedrawChart(); }
         }
 
-        [Display(Name = "Kommission abziehen (Netto-PnL)", GroupName = "Daten & Konto", Order = 19,
+        [Display(Name = "Kommission abziehen (Netto-PnL)", GroupName = "Daten & Konto", Order = 20,
                  Description = "An = PnL netto (Brutto minus Kommission je Trade). Aus = Brutto-PnL " +
                                "ohne Kommission. Zum Abgleich mit IQ Capital ggf. umschalten.")]
         public bool SubtractCommission
@@ -503,6 +546,19 @@ namespace TradeTimer
             _penGlowRed = new RenderPen(Color.FromArgb(70, 248, 113, 113), 3);
             _penGlowAmber = new RenderPen(Color.FromArgb(70, 240, 180, 70), 3);
             _penHighlight = new RenderPen(CHighlight, 1);
+        }
+
+        // ── Lebenszyklus: schwebendes Fenster oeffnen/schliessen ───────
+        protected override void OnInitialize()
+        {
+            base.OnInitialize();
+            // Fenster erscheint beim ersten OnRender (RenderWindow), sobald Daten da sind.
+        }
+
+        protected override void OnDispose()
+        {
+            CloseWindow();
+            base.OnDispose();
         }
 
         // ── Kein eigener System.Timers.Timer mehr ──────────────────────
@@ -835,8 +891,11 @@ namespace TradeTimer
         protected override void OnRender(RenderContext context, DrawingLayouts layout)
         {
             if (_showStatsPanel)
-                DrawStatsPanel(context);
+                DrawStatsPanel(new AtasCanvas(context), context.ClipBounds.Width, context.ClipBounds.Height,
+                               -1, -1, _collapsed, _activeTab, ref _scrollOffset);
             DrawTimer(context);
+            if (_showWindow)
+                RenderWindow(false);   // schwebendes Fenster aus demselben Zeichen-Code spiegeln
         }
 
         // Live-Timer als runde Pill mit Fortschritts-Ring zur Scalping-Schwelle.
@@ -895,11 +954,13 @@ namespace TradeTimer
             $"{"Datum/Zeit",-14} {"Sym",-6} {"R",-1} {"Dauer",6} {"PnL",10} {"%",6}";
         private const string Sep = "──────────────────────────────────────────────";
 
-        private void DrawStatsPanel(RenderContext context)
+        private void DrawStatsPanel(IPanelCanvas context, int viewW, int viewH,
+                                    int forceX, int forceY, bool collapsed, int activeTab, ref int scrollOffset)
         {
             var snap = _stats;
             if (snap == null || _statsFont == null)
                 return;
+            bool windowMode = forceX >= 0;
 
             var de = CultureInfo.GetCultureInfo("de-DE");
 
@@ -954,217 +1015,301 @@ namespace TradeTimer
             bool payoutOk = tradeOk && profitOk && consistencyOk && sessionsOk;
             bool statusOk = isEval ? targetOk : payoutOk;
             int fundedMissing = (!tradeOk ? 1 : 0) + (!profitOk ? 1 : 0) + (!consistencyOk ? 1 : 0) + (!sessionsOk ? 1 : 0);
-            int meterCount = isEval ? 3 : 4;   // Eval: Trades,Profite,Target | Funded: +Best-Day,Sessions
-
-            // "Was fehlt"-Zeilen je nach Kontotyp
-            var fehlt = new List<string>();
-            if (!tradeOk) fehlt.Add($"noch {Math.Max(0, snap.TotalCount - 2 * snap.OverCount)} Trades >{snap.MinSeconds}s");
-            if (!profitOk) fehlt.Add($"noch {Money(Math.Max(0m, snap.WinSum - 2 * snap.OverWinSum), de)} Profit aus >{snap.MinSeconds}s");
-            if (isEval)
-            {
-                if (!targetOk) fehlt.Insert(0, $"noch {Money(effTarget - np, de)} bis Profit-Target");
-            }
-            else
-            {
-                if (!consistencyOk) fehlt.Add($"Best-Day über Consistency ({_consistencyPct}%)");
-                if (!sessionsOk) fehlt.Add($"noch {_requiredSessions - snap.DistinctDays} aktive Sessions");
-            }
-
-            // ── Detailteil (Text-Tabelle, scrollbar) ──────────────────────
+            // Trade-Tabelle nur fuer den Trades-Reiter aufbauen
+            bool tradesTab = activeTab == 2;
             var body = new List<(string text, Color color)>();
-            if (!_collapsed)
+            if (!collapsed && tradesTab)
             {
                 AddSection(body, $"< {snap.MinSeconds}s", snap.UnderCount, snap.UnderWinSum,
                            underWinShare, snap.UnderWinners, snap.WinSum, de, CMuted, CGreen);
                 AddSection(body, $"> {snap.MinSeconds}s", snap.OverCount, snap.OverWinSum,
                            overWinShare, snap.OverWinners, snap.WinSum, de, CMuted, CGreen);
-                if (_lastCsvPath != null) { body.Add((Sep, CDim)); body.Add(($"CSV: {_lastCsvPath}", CDim)); }
+                if (_lastCsvPath != null) { body.Add((Sep, CDim)); body.Add(($"CSV: {Path.GetFileName(_lastCsvPath)}", CDim)); }
                 if (_lastError != null) body.Add(($"Hinweis: {Trunc(_lastError, 80)}", CRed));
             }
 
-            // ── Masse & Kopf-Strings ──────────────────────────────────────
-            const int padX = 14, padYt = 12, padYb = 12;
-            int lineH = context.MeasureString("0", _statsFont).Height + 4;
-            int sH = context.MeasureString("0", _statsFontSmall).Height + 2;
+            // ── Masse ─────────────────────────────────────────────────────
+            const int padX = 16, padYt = 14, padYb = 14;
+            int lineH = context.MeasureString("0", _statsFont).Height + 8;
+            int sH = context.MeasureString("0", _statsFontSmall).Height + 5;
             int bigH = context.MeasureString("0", _statsFontBig).Height;
-            int divH = 11;
-            int meterH = lineH + 16;
-            int pillH = lineH + 12;
-            int splitH = sH + 26;            // Profit-Split-Leiste
+            int divH = 14, meterH = lineH + 18, badgeH = lineH + 12, tabH = lineH + 10, chipH = lineH + 6, gBlock = 12;
+            int splitH = sH + 28;
+            int targetMeterH = lineH * 2 + 22;   // grosser Profit-Target-Block (Label/%, Balken, Werte)
 
-            string strDate = $"ab {snap.From:dd.MM.yy}{(_timeOffsetHours != 0 ? $"  ·  Zeit {(_timeOffsetHours >= 0 ? "+" : "")}{_timeOffsetHours}h" : "")}  ·  {kindLabel}";
-            string strHero = $"{Money(netTotal, de)} €";
-            string strGV = $"Gewinne {Money(snap.WinSum, de)}     Verluste {Money(snap.LossSum, de)}";
-            string strBrutto = $"Brutto {Money(snap.GrossSum, de)}   ·   Kommission {Money(-snap.CommissionTotal, de)}";
-            string strAusz = $"Auszahlbar ~{Money(payoutEst, de)}   ·   max {_withdrawCapPct}%·{_profitSplitPct}%{(effCap > 0 ? $"  Cap {Money(effCap, de)}" : "")}";
-            // Scalping wie im IQ-Dialog: aktuell / Minimum (Minimum = Schwelle% von Gesamt)
+            string tzNote = _autoLocalTime ? "  ·  Lokalzeit" : (_timeOffsetHours != 0 ? $"  ·  +{_timeOffsetHours}h" : "");
+            string strSub = $"{kindLabel}  ·  ab {snap.From:dd.MM.yy}{tzNote}";
             int minTrades = (int)Math.Ceiling((double)(thr / 100m) * snap.TotalCount);
             decimal minProfit = thr / 100m * snap.WinSum;
             string mTrades = $"{snap.OverCount} / Soll {minTrades} · {tradeShareOver.ToString("0.0", de)}%";
             string mProfit = $"{Money(snap.OverWinSum, de)} / Soll {Money(minProfit, de)} · {overWinShare.ToString("0.0", de)}%";
+            string strHero = $"{Money(netTotal, de)} $";
+            bool showAusz = !isEval;   // in der Evaluation gibt es noch keine Auszahlung
+            string chipAusz = $"Auszahlbar ~{Money(payoutEst, de)}";
 
-            // Kopf (immer sichtbar): Titel, Datum, Hero-Block (Netto, Zahl, G/V, Brutto/Komm, Auszahlbar)
-            int heroBlock = sH + bigH + lineH + sH + sH;
-            int headerH = padYt + lineH + sH + divH + heroBlock + divH
-                + pillH + meterCount * meterH + (isEval ? 0 : sH)   // +Consistency-Zeile (Funded)
-                + splitH + fehlt.Count * lineH + 6;
+            string badge = isEval
+                ? (targetOk ? "EVALUATION · ZIEL ERREICHT" : $"EVALUATION · Ziel {targetShare.ToString("0", de)}%")
+                : (payoutOk ? "PAYOUT ERLAUBT" : $"PAYOUT GESPERRT · {fundedMissing} offen");
+            var badgeCol = statusOk ? CGreenHi : (isEval ? CAmberHi : CRedHi);
+            var badgeGlow = statusOk ? _penGlowGreen : (isEval ? _penGlowAmber : _penGlowRed);
 
-            // Breite: groesste benoetigte Zeile (verhindert Ueberlappung/Ueberlauf)
+            var chips = new List<(string label, bool ok)>();
+            if (isEval) { chips.Add(("Ziel", targetOk)); chips.Add(("Trades", tradeOk)); chips.Add(("Profite", profitOk)); }
+            else { chips.Add(("Trades", tradeOk)); chips.Add(("Profite", profitOk)); chips.Add(("Best-Day", consistencyOk)); chips.Add(("Sessions", sessionsOk)); }
+
+            // Kopf-Hoehe (immer sichtbar) + Inhalts-Hoehe je Reiter
+            int headerH = padYt + lineH + sH + divH + (sH + bigH) + gBlock + badgeH + gBlock + chipH + gBlock + tabH + gBlock;
+            int uebersichtH = showAusz
+                ? lineH * 2 + divH + lineH * 3 + divH + lineH + sH + divH + splitH
+                : lineH * 2 + divH + lineH * 3 + divH + splitH;   // ohne Auszahlbar-Block (Eval)
+            int payoutH = isEval ? targetMeterH + meterH * 2 : meterH * 4 + sH;
+
+            // Breite
+            int chipAuszW = showAusz ? context.MeasureString(chipAusz, _statsFontSmall).Width + 22 : 0;
             int innerW = 360;
-            innerW = Math.Max(innerW, context.MeasureString(strHero, _statsFontBig).Width + 8);
-            innerW = Math.Max(innerW, context.MeasureString($"{(_collapsed ? "▸" : "▾")} TRADE TIMER", _statsFontBold).Width
+            innerW = Math.Max(innerW, context.MeasureString(strHero, _statsFontBig).Width + chipAuszW + 18);
+            innerW = Math.Max(innerW, context.MeasureString("▾ TRADE TIMER", _statsFontBold).Width
                                        + 16 + context.MeasureString(snap.AccountLabel, _statsFontSmall).Width);
-            foreach (var s in new[] { strDate, strGV, strBrutto, strAusz })
-                innerW = Math.Max(innerW, context.MeasureString(s, _statsFont).Width);
-            foreach (var (t, _) in body) innerW = Math.Max(innerW, context.MeasureString(t, _statsFont).Width);
-            // Meter-Zeilen (Label links + Wert rechts + Status-Punkt) muessen reinpassen
-            innerW = Math.Max(innerW, context.MeasureString($"Trades >{snap.MinSeconds}s", _statsFont).Width
-                                       + 30 + context.MeasureString(mTrades, _statsFont).Width + 14);
+            innerW = Math.Max(innerW, context.MeasureString(ColHeader, _statsFont).Width);
             innerW = Math.Max(innerW, context.MeasureString($"Profite >{snap.MinSeconds}s", _statsFont).Width
                                        + 30 + context.MeasureString(mProfit, _statsFont).Width + 14);
+            innerW = Math.Max(innerW, context.MeasureString($"   Netto × {_withdrawCapPct}% × {_profitSplitPct}% · Cap {Money(effCap, de)}", _statsFontSmall).Width);
             int boxW = innerW + padX * 2;
-            _lastBoxW = boxW;
+            if (windowMode) _winBoxW = boxW; else _lastBoxW = boxW;
 
-            int posX = context.ClipBounds.Width - boxW - _statsOffsetX;
-            int posY = _statsOffsetY;
+            int posX = windowMode ? forceX : viewW - boxW - _statsOffsetX;
+            int posY = windowMode ? forceY : _statsOffsetY;
             if (posX < 0) posX = 0;
             if (posY < 0) posY = 0;
 
-            // ── Scroll-Viewport fuer den Detailteil ───────────────────────
-            int bodyTop = posY + headerH;
-            int availBody = context.ClipBounds.Height - bodyTop - padYb - 4;
-            int bodyCap = Math.Max(1, availBody / lineH);
-            bool scrollable = body.Count > bodyCap;
-
+            // ── Trades-Reiter: Scroll-Viewport ────────────────────────────
+            int contentTop = posY + headerH;
             var drawBody = new List<(string text, Color color)>();
-            if (_collapsed)
+            int contentH = 0;
+            if (!collapsed)
             {
-                _scrollOffset = 0;
+                if (activeTab == 0) contentH = uebersichtH;
+                else if (activeTab == 1) contentH = payoutH;
+                else
+                {
+                    int avail = viewH - contentTop - padYb - 4;
+                    int cap = Math.Max(1, avail / lineH);
+                    if (body.Count <= cap) { scrollOffset = 0; drawBody.AddRange(body); }
+                    else
+                    {
+                        int maxOff = Math.Max(0, body.Count - (cap - 1));
+                        scrollOffset = Math.Clamp(scrollOffset, 0, maxOff);
+                        bool top = scrollOffset > 0;
+                        int rows = cap - (top ? 1 : 0);
+                        bool more = scrollOffset + rows < body.Count;
+                        if (more) rows -= 1;
+                        int end = Math.Min(body.Count, scrollOffset + rows);
+                        if (top) drawBody.Add(($"  ▲ {scrollOffset} weitere oben", CDim));
+                        for (int i = scrollOffset; i < end; i++) drawBody.Add(body[i]);
+                        int restN = body.Count - end;
+                        if (restN > 0) drawBody.Add(($"  ▼ {restN} weitere unten", CDim));
+                    }
+                    contentH = drawBody.Count * lineH;
+                }
             }
-            else if (!scrollable)
-            {
-                _scrollOffset = 0;
-                drawBody.AddRange(body);
-            }
-            else
-            {
-                int maxOffset = Math.Max(0, body.Count - (bodyCap - 1));
-                _scrollOffset = Math.Clamp(_scrollOffset, 0, maxOffset);
-                bool top = _scrollOffset > 0;
-                int rows = bodyCap - (top ? 1 : 0);
-                bool more = _scrollOffset + rows < body.Count;
-                if (more) rows -= 1;
-                int end = Math.Min(body.Count, _scrollOffset + rows);
-                if (top) drawBody.Add(($"  ▲ {_scrollOffset} weitere oben", CDim));
-                for (int i = _scrollOffset; i < end; i++) drawBody.Add(body[i]);
-                int restN = body.Count - end;
-                if (restN > 0) drawBody.Add(($"  ▼ {restN} weitere unten", CDim));
-            }
+            else scrollOffset = 0;
 
-            int boxH = headerH + drawBody.Count * lineH + padYb;
+            int boxH = headerH + contentH + (collapsed ? 0 : padYb);
 
             // ── Panel-Hintergrund ─────────────────────────────────────────
-            _panelRect = new Rectangle(posX, posY, boxW, boxH);
-            _headerHitRect = new Rectangle(posX, posY, boxW, headerH);
-            context.FillRectangle(CBg, _panelRect, 10);
-            context.DrawRectangle(_penGlow, _panelRect, 10);                 // weicher Neon-Glow
-            context.DrawRectangle(_penAccent, _panelRect, 10);               // scharfe Cyan-Kante
+            var panelRect = new Rectangle(posX, posY, boxW, boxH);
+            var headerRect = new Rectangle(posX, posY, boxW, headerH);
+            if (windowMode) { _winBoxH = boxH; _winHeaderRect = headerRect; }
+            else { _panelRect = panelRect; _headerHitRect = headerRect; }
+            context.FillRectangle(CBg, panelRect, 10);
+            context.DrawRectangle(_penGlow, panelRect, 10);
+            context.DrawRectangle(_penAccent, panelRect, 10);
 
             int x = posX + padX;
             int y = posY + padYt;
 
-            // Titel auf Gradient-Leiste
-            context.FillRectangle(CTitle1, CTitle2, new Rectangle(posX + 3, posY + 3, boxW - 6, lineH + padYt - 5));
-            context.DrawString($"{(_collapsed ? "▸" : "▾")} TRADE TIMER", _statsFontBold, CAccent, x, y);
+            // Titel (Titelzeile klickbar = collapse)
+            context.FillGradient(CTitle1, CTitle2, new Rectangle(posX + 3, posY + 3, boxW - 6, lineH + padYt - 5));
+            context.DrawString($"{(collapsed ? "▸" : "▾")} TRADE TIMER", _statsFontBold, CAccent, x, y);
             context.DrawString(snap.AccountLabel, _statsFontSmall, CDim,
-                new Rectangle(x, y, innerW, lineH), FmtRight);
+                new Rectangle(x, y, innerW - (windowMode ? 26 : 0), lineH), FmtRight);
+            if (windowMode)
+            {
+                // Close-X in die Bitmap zeichnen (oben rechts), Trefferbereich merken
+                _winCloseRect = new Rectangle(posX + boxW - 32, posY, 32, 28);
+                int xs = posX + boxW - 22, ys = posY + 11;
+                var xpen = new RenderPen(CMuted, 2);
+                context.DrawLine(xpen, xs, ys, xs + 9, ys + 9);
+                context.DrawLine(xpen, xs + 9, ys, xs, ys + 9);
+            }
+            else _titleHitRect = new Rectangle(posX, posY, boxW, lineH + padYt - 2);
             y += lineH;
-            context.DrawString(strDate, _statsFontSmall, CDim, x, y); y += sH;
+            context.DrawString(strSub, _statsFontSmall, CDim, x, y); y += sH;
             y += divH / 2; context.DrawLine(_penDivider, x, y, x + innerW, y); y += divH - divH / 2;
 
-            // Hero: Netto gross; darunter Gewinne/Verluste, Brutto/Kommission, Auszahlbar (alles linksbuendig)
-            context.DrawString("Netto-PnL", _statsFontSmall, CDim, x, y); y += sH;
-            context.DrawString(strHero, _statsFontBig, netTotal >= 0 ? CGreenHi : CRedHi, x, y); y += bigH;
+            // Hero: NETTO + grosse Zahl + Auszahlbar-Chip rechts (nur Funded/Instant)
+            if (showAusz)
             {
-                int gx = x;
-                gx += DrawSeg(context, "Gewinne ", _statsFont, CMuted, gx, y);
-                gx += DrawSeg(context, Money(snap.WinSum, de), _statsFont, CGreenHi, gx, y);
-                gx += DrawSeg(context, "     Verluste ", _statsFont, CMuted, gx, y);
-                DrawSeg(context, Money(snap.LossSum, de), _statsFont, CRedHi, gx, y);
+                var auszRect = new Rectangle(x + innerW - chipAuszW, y, chipAuszW, sH + bigH - 2);
+                context.FillRectangle(Color.FromArgb(255, 17, 22, 31), auszRect, 8);
+                context.DrawRectangle(new RenderPen(Color.FromArgb(120, 167, 139, 250), 1), auszRect, 8);
+                context.DrawString("Auszahlbar", _statsFontSmall, CDim, auszRect.X + 10, auszRect.Y + 5);
+                context.DrawString($"~{Money(payoutEst, de)}", _statsFontBold, CViolet, auszRect.X + 10, auszRect.Y + 5 + sH);
             }
-            y += lineH;
-            context.DrawString(strBrutto, _statsFontSmall, CMuted, x, y); y += sH;
-            context.DrawString(strAusz, _statsFontSmall, CViolet, x, y); y += sH;
-            y += divH / 2; context.DrawLine(_penDivider, x, y, x + innerW, y); y += divH - divH / 2;
+            context.DrawString("NETTO", _statsFontSmall, CDim, x, y); y += sH;
+            context.DrawString(strHero, _statsFontBig, netTotal >= 0 ? CGreenHi : CRedHi, x, y); y += bigH; y += gBlock;
 
-            // Status-Pille: Evaluation = Profit-Target, Funded = Payout (farbig, mit Glow)
-            var pill = new Rectangle(x, y, innerW, pillH - 6);
-            int prad = (pillH - 6) / 2;
-            var pillCol = statusOk ? CGreenHi : (isEval ? CAmberHi : CRedHi);
-            var pillGlow = statusOk ? _penGlowGreen : (isEval ? _penGlowAmber : _penGlowRed);
-            string pillText = isEval
-                ? (targetOk ? "EVALUATION · ZIEL ERREICHT" : $"EVALUATION · noch {Money(effTarget - np, de)}")
-                : (payoutOk ? "PAYOUT ERLAUBT" : $"PAYOUT GESPERRT · {fundedMissing} offen");
-            context.DrawRectangle(pillGlow,
-                new Rectangle(pill.X - 1, pill.Y - 1, pill.Width + 2, pill.Height + 2), prad + 1);
-            context.FillRectangle(pillCol, pill, prad);
-            context.DrawRectangle(_penHighlight,
-                new Rectangle(pill.X + 2, pill.Y + 1, pill.Width - 4, pill.Height - 2), prad);
-            context.DrawString(pillText, _statsFontBold, CPillText, pill, FmtCenter);
-            y += pillH;
+            // Status-Badge (volle Breite)
+            var badgeRect = new Rectangle(x, y, innerW, badgeH);
+            int brad = badgeH / 2;
+            context.DrawRectangle(badgeGlow, new Rectangle(badgeRect.X - 1, badgeRect.Y - 1, badgeRect.Width + 2, badgeRect.Height + 2), brad + 1);
+            context.FillRectangle(badgeCol, badgeRect, brad);
+            context.DrawRectangle(_penHighlight, new Rectangle(badgeRect.X + 2, badgeRect.Y + 1, badgeRect.Width - 4, badgeRect.Height - 2), brad);
+            context.DrawString(badge, _statsFontBold, CPillText, badgeRect, FmtCenter);
+            y += badgeH + gBlock;
 
-            // Meter: Scalping immer; dann Eval = Profit-Target, Funded = Best-Day + Sessions
-            DrawMeter(context, x, y, innerW, lineH, $"Trades >{snap.MinSeconds}s",
-                mTrades, (double)(tradeShareOver / 100m), (double)(thr / 100m), tradeOk); y += meterH;
-            DrawMeter(context, x, y, innerW, lineH, $"Profite >{snap.MinSeconds}s",
-                mProfit, (double)(overWinShare / 100m), (double)(thr / 100m), profitOk); y += meterH;
-            if (isEval)
+            // Ampel-Chips (erfuellt = gruen, offen = rot)
+            int cxp = x;
+            foreach (var (clabel, cok) in chips)
             {
-                DrawMeter(context, x, y, innerW, lineH, "Profit-Target",
-                    $"{Money(np, de)} / {Money(effTarget, de)} · {targetShare.ToString("0.0", de)}%",
-                    (double)(targetShare / 100m), 1.0, targetOk); y += meterH;
+                int cw = context.MeasureString(clabel, _statsFontSmall).Width + 34;
+                if (cxp + cw > x + innerW) break;
+                int crad = (chipH - 2) / 2;
+                var cr = new Rectangle(cxp, y, cw, chipH - 2);
+                context.FillRectangle(cok ? Color.FromArgb(255, 14, 32, 24) : Color.FromArgb(255, 42, 18, 22), cr, crad);
+                context.DrawRectangle(new RenderPen(cok ? Color.FromArgb(120, 52, 211, 153) : Color.FromArgb(120, 248, 113, 113), 1), cr, crad);
+                // Haken / Kreuz mit Linien zeichnen (Font-unabhaengig)
+                var markPen = new RenderPen(cok ? CGreenHi : CRedHi, 2);
+                int mx = cr.X + 14, my = cr.Y + crad;
+                if (cok)
+                {
+                    context.DrawLine(markPen, mx - 4, my, mx - 1, my + 3);
+                    context.DrawLine(markPen, mx - 1, my + 3, mx + 5, my - 4);
+                }
+                else
+                {
+                    context.DrawLine(markPen, mx - 4, my - 4, mx + 4, my + 4);
+                    context.DrawLine(markPen, mx - 4, my + 4, mx + 4, my - 4);
+                }
+                context.DrawString(clabel, _statsFontSmall, cok ? Color.FromArgb(255, 159, 233, 200) : Color.FromArgb(255, 248, 160, 160),
+                    new Rectangle(cr.X + 25, cr.Y, cw - 28, chipH - 2), FmtMidLeft);
+                cxp += cw + 6;
             }
-            else
+            y += chipH + gBlock;
+
+            // Tab-Leiste
+            var tabBar = new Rectangle(x, y, innerW, tabH);
+            context.FillRectangle(Color.FromArgb(255, 16, 22, 31), tabBar, 6);
+            string[] tabNames = { "Übersicht", isEval ? "Challenge" : "Payout", "Trades" };
+            int twi = innerW / 3;
+            for (int i = 0; i < 3; i++)
             {
-                DrawMeter(context, x, y, innerW, lineH, "Best-Day",
-                    $"{Money(snap.BestDayPnl, de)} · {bestDayShare.ToString("0.0", de)}%",
-                    (double)(bestDayShare / 100m), (double)(_consistencyPct / 100m), consistencyOk); y += meterH;
-                // Consistency: noetiger Gesamtgewinn (Best-Day / Consistency%)
-                string consLine = consRequired > 0m
-                    ? $"  Consistency: nötig {consRequired.ToString("#,##0.00", de)} €  ·  aktuell {Money(netTotal, de)}"
-                    : "  Consistency: noch kein Gewinn-Tag";
-                context.DrawString(consLine, _statsFontSmall, consistencyOk ? CGreen : CAmber, x, y); y += sH;
-                DrawSessionsRow(context, x, y, innerW, lineH, _requiredSessions, snap.DistinctDays, sessionsOk); y += meterH;
+                var tr = new Rectangle(x + i * twi, y, i == 2 ? innerW - 2 * twi : twi, tabH);
+                if (windowMode) _winTabRects[i] = tr; else _tabRects[i] = tr;
+                bool active = activeTab == i && !collapsed;
+                if (active)
+                {
+                    context.FillRectangle(Color.FromArgb(255, 12, 43, 51), new Rectangle(tr.X + 2, tr.Y + 2, tr.Width - 4, tr.Height - 4), 5);
+                    context.DrawRectangle(new RenderPen(Color.FromArgb(150, 34, 211, 238), 1), new Rectangle(tr.X + 2, tr.Y + 2, tr.Width - 4, tr.Height - 4), 5);
+                }
+                context.DrawString(tabNames[i], active ? _statsFontBold : _statsFontSmall, active ? CAccent : CMuted, tr, FmtCenter);
             }
+            y += tabH + gBlock;
 
-            // Profit-Split >15s / <15s (beide Summen + beide Prozente)
-            DrawSplitBar(context, x, y, innerW, sH, snap.MinSeconds,
-                         snap.OverWinSum, overWinShare, snap.UnderWinSum, underWinShare, de); y += splitH;
+            if (collapsed) return;
 
-            // Was fehlt
-            foreach (var f in fehlt)
+            // ── Reiter-Inhalt ─────────────────────────────────────────────
+            if (activeTab == 0)   // Übersicht
             {
-                context.DrawString($"› {f}", _statsFontSmall, CAmber, x, y); y += lineH;
+                DrawKV(context, x, y, innerW, lineH, "Brutto", Money(snap.GrossSum, de), CGreenHi); y += lineH;
+                DrawKV(context, x, y, innerW, lineH, "Kommission", Money(-snap.CommissionTotal, de), CRedHi); y += lineH;
+                y += divH / 2; context.DrawLine(_penDivider, x, y, x + innerW, y); y += divH - divH / 2;
+                DrawKV(context, x, y, innerW, lineH, "Gewinne", Money(snap.WinSum, de), CGreenHi); y += lineH;
+                DrawKV(context, x, y, innerW, lineH, "Verluste", Money(snap.LossSum, de), CRedHi); y += lineH;
+                int winCnt = snap.UnderWinners.Count + snap.OverWinners.Count;
+                int wr = snap.TotalCount > 0 ? (int)Math.Round(100.0 * winCnt / snap.TotalCount) : 0;
+                DrawKV(context, x, y, innerW, lineH, "Trefferquote", $"{wr}% · {snap.TotalCount} Trades", CValue); y += lineH;
+                y += divH / 2; context.DrawLine(_penDivider, x, y, x + innerW, y); y += divH - divH / 2;
+                if (showAusz)
+                {
+                    DrawKV(context, x, y, innerW, lineH, "Auszahlbar", $"~{Money(payoutEst, de)}", CViolet); y += lineH;
+                    context.DrawString($"   Netto × {_withdrawCapPct}% × {_profitSplitPct}%{(effCap > 0 ? $" · Cap {Money(effCap, de)}" : "")}", _statsFontSmall, CDim, x, y); y += sH;
+                    y += divH / 2; context.DrawLine(_penDivider, x, y, x + innerW, y); y += divH - divH / 2;
+                }
+                DrawSplitBar(context, x, y, innerW, sH, snap.MinSeconds, snap.OverWinSum, overWinShare, snap.UnderWinSum, underWinShare, de); y += splitH;
             }
-
-            // Detail-Tabelle (Text, scrollbar)
-            y = bodyTop;
-            foreach (var (text, color) in drawBody)
+            else if (activeTab == 1)   // Payout
             {
-                context.DrawString(text, _statsFont, color, x, y);
-                y += lineH;
+                if (isEval)
+                {
+                    DrawTargetMeter(context, x, y, innerW, lineH, "PROFIT-TARGET",
+                        Money(np, de), Money(effTarget, de), targetShare,
+                        Money(Math.Max(0m, effTarget - np), de), targetOk); y += targetMeterH;
+                    DrawMeter(context, x, y, innerW, lineH, $"Trades >{snap.MinSeconds}s",
+                        mTrades, (double)(tradeShareOver / 100m), (double)(thr / 100m), tradeOk); y += meterH;
+                    DrawMeter(context, x, y, innerW, lineH, $"Profite >{snap.MinSeconds}s",
+                        mProfit, (double)(overWinShare / 100m), (double)(thr / 100m), profitOk); y += meterH;
+                }
+                else
+                {
+                    DrawMeter(context, x, y, innerW, lineH, $"Trades >{snap.MinSeconds}s",
+                        mTrades, (double)(tradeShareOver / 100m), (double)(thr / 100m), tradeOk); y += meterH;
+                    DrawMeter(context, x, y, innerW, lineH, $"Profite >{snap.MinSeconds}s",
+                        mProfit, (double)(overWinShare / 100m), (double)(thr / 100m), profitOk); y += meterH;
+                    DrawMeter(context, x, y, innerW, lineH, "Best-Day",
+                        $"{Money(snap.BestDayPnl, de)} · {bestDayShare.ToString("0.0", de)}%",
+                        (double)(bestDayShare / 100m), (double)(_consistencyPct / 100m), consistencyOk); y += meterH;
+                    string consLine = consRequired > 0m
+                        ? $"  Consistency: nötig {consRequired.ToString("#,##0.00", de)} $  ·  aktuell {Money(netTotal, de)}"
+                        : "  Consistency: noch kein Gewinn-Tag";
+                    context.DrawString(consLine, _statsFontSmall, consistencyOk ? CGreen : CAmber, x, y); y += sH;
+                    DrawSessionsRow(context, x, y, innerW, lineH, _requiredSessions, snap.DistinctDays, sessionsOk); y += meterH;
+                }
+            }
+            else   // Trades
+            {
+                foreach (var (text, color) in drawBody)
+                {
+                    context.DrawString(text, _statsFont, color, x, y);
+                    y += lineH;
+                }
             }
         }
 
+        // Grosser Profit-Target-Block: Label + % oben, dicker Balken, Werte-Zeile darunter.
+        private void DrawTargetMeter(IPanelCanvas context, int x, int y, int w, int lineH,
+                                     string label, string npStr, string targetStr, decimal share, string remainStr, bool ok)
+        {
+            var de = CultureInfo.GetCultureInfo("de-DE");
+            var col = ok ? CGreenHi : CAmberHi;
+            context.DrawString(label, _statsFont, CMuted, x, y);
+            context.DrawString($"{share.ToString("0.0", de)} %", _statsFontBold, col, new Rectangle(x, y, w, lineH), FmtRight);
+            int by = y + lineH + 2, bh = 16;
+            context.FillRectangle(CTrack, new Rectangle(x, by, w, bh), bh / 2);
+            int fw = (int)(w * Math.Clamp((double)(share / 100m), 0, 1));
+            if (fw > 0) context.FillRectangle(col, new Rectangle(x, by, fw, bh), bh / 2);
+            int vy = by + bh + 4;
+            context.DrawString($"{npStr} / {targetStr} $", _statsFont, CValue, x, vy);
+            context.DrawString(ok ? "Ziel erreicht" : $"noch {remainStr} $", _statsFont, col,
+                new Rectangle(x, vy, w, lineH), FmtRight);
+        }
+
+        // Schluessel-Wert-Zeile: Label links (gedaempft), Wert rechts (farbig).
+        private void DrawKV(IPanelCanvas context, int x, int y, int w, int lineH, string key, string val, Color valCol)
+        {
+            context.DrawString(key, _statsFont, CMuted, x, y);
+            context.DrawString(val, _statsFont, valCol, new Rectangle(x, y, w, lineH), FmtRight);
+        }
+
         // Zeichnet ein Text-Segment und gibt seine Breite zurueck (fuer linksbuendige Mehrfarb-Zeilen).
-        private int DrawSeg(RenderContext context, string s, RenderFont font, Color col, int x, int y)
+        private int DrawSeg(IPanelCanvas context, string s, RenderFont font, Color col, int x, int y)
         {
             context.DrawString(s, font, col, x, y);
             return context.MeasureString(s, font).Width;
         }
 
         // Fortschrittsbalken: Label links, Wert (neutral weiss) rechts, Status-Punkt, 50%-Kerbe.
-        private void DrawMeter(RenderContext context, int x, int y, int w, int lineH,
+        private void DrawMeter(IPanelCanvas context, int x, int y, int w, int lineH,
                                string label, string val, double frac, double tick, bool ok)
         {
             context.DrawString(label, _statsFont, CMuted, x, y);
@@ -1174,14 +1319,14 @@ namespace TradeTimer
             context.FillRectangle(CTrack, new Rectangle(x, ty, w, bh), bh / 2);
             int fw = (int)(w * Math.Clamp(frac, 0, 1));
             if (fw > 0)
-                context.FillRectangle(ok ? CGreenHi : CRedHi, ok ? CGreenLo : CRedLo,
+                context.FillGradient(ok ? CGreenHi : CRedHi, ok ? CGreenLo : CRedLo,
                     new Rectangle(x, ty, fw, bh));
             int tx = x + (int)(w * Math.Clamp(tick, 0, 1));
             context.DrawLine(_penTick, tx, ty - 3, tx, ty + bh + 3);
         }
 
         // Segmentierte Leiste: Gewinne >15s (gruen) vs <15s (bernstein), beide mit EUR + %.
-        private void DrawSplitBar(RenderContext context, int x, int y, int w, int sH, int minSec,
+        private void DrawSplitBar(IPanelCanvas context, int x, int y, int w, int sH, int minSec,
                                   decimal overSum, decimal overShare, decimal underSum, decimal underShare,
                                   CultureInfo de)
         {
@@ -1192,8 +1337,8 @@ namespace TradeTimer
             context.FillRectangle(CTrack, new Rectangle(x, by, w, bh), bh / 2);
             int ow = (int)(w * Math.Clamp((double)(overShare / 100m), 0, 1));
             int uw = Math.Min(w - ow, (int)(w * Math.Clamp((double)(underShare / 100m), 0, 1)));
-            if (ow > 0) context.FillRectangle(CGreenHi, CGreenLo, new Rectangle(x, by, ow, bh));
-            if (uw > 0) context.FillRectangle(CAmberHi, CAmberLo, new Rectangle(x + ow, by, uw, bh));
+            if (ow > 0) context.FillGradient(CGreenHi, CGreenLo, new Rectangle(x, by, ow, bh));
+            if (uw > 0) context.FillGradient(CAmberHi, CAmberLo, new Rectangle(x + ow, by, uw, bh));
             if (ow > 44)
                 context.DrawString($"{overShare.ToString("0.0", de)}%", _statsFontSmall, CPillText,
                     new Rectangle(x, by, ow, bh), FmtCenter);
@@ -1203,7 +1348,7 @@ namespace TradeTimer
         }
 
         // Session-Reihe: Punkte, gefuellt (mit Glow) = aktive Tage.
-        private void DrawSessionsRow(RenderContext context, int x, int y, int w, int lineH,
+        private void DrawSessionsRow(IPanelCanvas context, int x, int y, int w, int lineH,
                                      int total, int filled, bool ok)
         {
             context.DrawString("Sessions", _statsFont, CMuted, x, y);
@@ -1298,18 +1443,29 @@ namespace TradeTimer
             if (_dragging)
             {
                 _dragging = false;
-                if (!_didDrag)           // reiner Klick (ohne Bewegung) -> auf/zu
-                    _collapsed = !_collapsed;
+                if (!_didDrag)   // reiner Klick (ohne Bewegung)
+                {
+                    // 1) Reiter angeklickt -> wechseln (und ggf. aufklappen)
+                    bool hitTab = false;
+                    for (int i = 0; i < 3; i++)
+                        if (_tabRects[i].Contains(e.X, e.Y))
+                        {
+                            _activeTab = i; _scrollOffset = 0; _collapsed = false; hitTab = true; break;
+                        }
+                    // 2) sonst Titelzeile -> Detail ein/ausklappen
+                    if (!hitTab && _titleHitRect.Contains(e.X, e.Y))
+                        _collapsed = !_collapsed;
+                }
                 RedrawChart();
                 return true;
             }
             return base.ProcessMouseUp(e);
         }
 
-        // Mausrad ueber dem Panel scrollt den Detailteil.
+        // Mausrad ueber dem Panel scrollt die Trade-Liste (nur im Trades-Reiter).
         public override bool ProcessMouseWheel(int delta)
         {
-            if (_showStatsPanel && !_collapsed && _stats != null
+            if (_showStatsPanel && !_collapsed && _activeTab == 2 && _stats != null
                 && _panelRect.Contains(_lastMouseX, _lastMouseY))
             {
                 _scrollOffset += delta > 0 ? -2 : 2;   // Rad hoch = nach oben
@@ -1320,7 +1476,12 @@ namespace TradeTimer
             return base.ProcessMouseWheel(delta);
         }
 
-        private DateTime Disp(DateTime t) => t.AddHours(_timeOffsetHours);
+        // Anzeige-Zeit: ATAS speichert UTC. Auto = in Systemzeitzone wandeln
+        // (Sommer-/Winterzeit automatisch); sonst fester manueller Versatz.
+        private DateTime Disp(DateTime t)
+            => _autoLocalTime
+                ? TimeZoneInfo.ConvertTimeFromUtc(DateTime.SpecifyKind(t, DateTimeKind.Utc), TimeZoneInfo.Local)
+                : t.AddHours(_timeOffsetHours);
 
         // Kontogroesse (in 1000) aus der Konto-ID lesen: IQF..200K/100K/50K..
         private static int DetectSizeK(string acc)
@@ -1354,6 +1515,294 @@ namespace TradeTimer
 
         private static string Trunc(string s, int max)
             => string.IsNullOrEmpty(s) ? "" : (s.Length <= max ? s : s.Substring(0, max));
+
+        // ── Schwebendes Fenster (pixelgleicher Spiegel des Chart-Panels) ──
+        private static System.Windows.Threading.Dispatcher? UiDisp
+            => System.Windows.Application.Current?.Dispatcher;
+
+        private void ApplyTopmost()
+            => UiDisp?.BeginInvoke(new Action(() => { try { if (_window != null) _window.Topmost = _windowTopmost; } catch { } }));
+
+        private void CloseWindow()
+        {
+            var disp = UiDisp;
+            if (disp == null) { _window = null; return; }
+            disp.BeginInvoke(new Action(CloseWindowUi));
+        }
+
+        private void CloseWindowUi()
+        {
+            try { _window?.Close(); } catch { }
+            _window = null;
+        }
+
+        // Klick aufs X im Fenster.
+        private void CloseFromWindow()
+        {
+            _showWindow = false;
+            CloseWindowUi();
+        }
+
+        // Rendert das Panel mit DERSELBEN Logik in eine Bitmap und zeigt sie im
+        // Fenster -> 100% identisch zum Chart-Panel. Aufruf aus OnRender (gedrosselt).
+        private void RenderWindow(bool force)
+        {
+            if (!_showWindow || _stats == null || _statsFont == null) return;
+            if (!force)
+            {
+                int now = Environment.TickCount;
+                if (now - _winLastTick < 120) return;
+                _winLastTick = now;
+            }
+            System.Windows.Media.Imaging.BitmapSource src;
+            int bw, bh;
+            try { src = BuildPanelBitmap(out bw, out bh); }
+            catch (Exception ex) { _lastError = ex.Message; return; }
+
+            UiDisp?.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    if (!_showWindow || IsDisposed) return;
+                    if (_window == null) _window = new PanelWindow(this);
+                    _window.Topmost = _windowTopmost;
+                    _window.SetImage(src, bw, bh);
+                    if (!_window.IsVisible) _window.Show();
+                }
+                catch { }
+            }));
+        }
+
+        // Synchroner Refresh vom UI-Thread (Reiter-Klick / Scrollen im Fenster).
+        private void RefreshWindowUi()
+        {
+            try
+            {
+                if (_window == null || _stats == null || _statsFont == null) return;
+                var src = BuildPanelBitmap(out int bw, out int bh);
+                _window.SetImage(src, bw, bh);
+            }
+            catch (Exception ex) { _lastError = ex.Message; }
+        }
+
+        private System.Windows.Media.Imaging.BitmapSource BuildPanelBitmap(out int bw, out int bh)
+        {
+            const int W = 760, H = 1000;
+            const int layoutH = 640;   // begrenzt die Trades-Liste -> Pagination/Scroll wie im Panel
+            using var bmp = new System.Drawing.Bitmap(W, H, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            using (var g = System.Drawing.Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+                g.Clear(System.Drawing.Color.Transparent);
+                DrawStatsPanel(new GdiCanvas(g), W, layoutH, 0, 0, false, _winTab, ref _winScroll);
+            }
+            bw = Math.Clamp(_winBoxW, 1, W);
+            bh = Math.Clamp(_winBoxH, 1, H);
+            return ToBitmapSource(bmp, bw, bh);
+        }
+
+        private static System.Windows.Media.Imaging.BitmapSource ToBitmapSource(System.Drawing.Bitmap bmp, int w, int h)
+        {
+            var data = bmp.LockBits(new Rectangle(0, 0, w, h),
+                System.Drawing.Imaging.ImageLockMode.ReadOnly, System.Drawing.Imaging.PixelFormat.Format32bppPArgb);
+            try
+            {
+                var src = System.Windows.Media.Imaging.BitmapSource.Create(
+                    w, h, 96, 96, System.Windows.Media.PixelFormats.Pbgra32, null,
+                    data.Scan0, data.Stride * bmp.Height, data.Stride);
+                src.Freeze();
+                return src;
+            }
+            finally { bmp.UnlockBits(data); }
+        }
+
+        // ── Zeichen-Abstraktion: Chart (ATAS) und Fenster (GDI+) teilen DrawStatsPanel ──
+        private interface IPanelCanvas
+        {
+            Size MeasureString(string s, RenderFont f);
+            void DrawString(string s, RenderFont f, Color c, int x, int y);
+            void DrawString(string s, RenderFont f, Color c, Rectangle r, RenderStringFormat fmt);
+            void FillRectangle(Color c, Rectangle r);
+            void FillRectangle(Color c, Rectangle r, int radius);
+            void FillGradient(Color c1, Color c2, Rectangle r);
+            void DrawRectangle(RenderPen p, Rectangle r, int radius);
+            void DrawLine(RenderPen p, int x1, int y1, int x2, int y2);
+            void FillEllipse(Color c, Rectangle r);
+            void SetClip(Rectangle r);
+            void ResetClip();
+        }
+
+        private sealed class AtasCanvas : IPanelCanvas
+        {
+            private readonly RenderContext _c;
+            public AtasCanvas(RenderContext c) { _c = c; }
+            public Size MeasureString(string s, RenderFont f) => _c.MeasureString(s, f);
+            public void DrawString(string s, RenderFont f, Color c, int x, int y) => _c.DrawString(s, f, c, x, y);
+            public void DrawString(string s, RenderFont f, Color c, Rectangle r, RenderStringFormat fmt) => _c.DrawString(s, f, c, r, fmt);
+            public void FillRectangle(Color c, Rectangle r) => _c.FillRectangle(c, r);
+            public void FillRectangle(Color c, Rectangle r, int radius) => _c.FillRectangle(c, r, radius);
+            public void FillGradient(Color c1, Color c2, Rectangle r) => _c.FillRectangle(c1, c2, r);
+            public void DrawRectangle(RenderPen p, Rectangle r, int radius) => _c.DrawRectangle(p, r, radius);
+            public void DrawLine(RenderPen p, int x1, int y1, int x2, int y2) => _c.DrawLine(p, x1, y1, x2, y2);
+            public void FillEllipse(Color c, Rectangle r) => _c.FillEllipse(c, r);
+            public void SetClip(Rectangle r) => _c.SetClip(r);
+            public void ResetClip() => _c.ResetClip();
+        }
+
+        private sealed class GdiCanvas : IPanelCanvas
+        {
+            private readonly System.Drawing.Graphics _g;
+            public GdiCanvas(System.Drawing.Graphics g) { _g = g; }
+
+            private static System.Drawing.Font F(RenderFont f) => new(f.FontFamily, f.Size, f.Style);
+            private static System.Drawing.StringFormat SF(RenderStringFormat fmt) => new()
+            {
+                Alignment = fmt.Alignment,
+                LineAlignment = fmt.LineAlignment,
+                FormatFlags = fmt.FormatFlags | System.Drawing.StringFormatFlags.NoWrap,
+                Trimming = System.Drawing.StringTrimming.None
+            };
+
+            public Size MeasureString(string s, RenderFont f)
+            {
+                using var fo = F(f);
+                var sz = _g.MeasureString(s ?? "", fo, int.MaxValue, System.Drawing.StringFormat.GenericTypographic);
+                return new Size((int)Math.Ceiling(sz.Width), (int)Math.Ceiling(sz.Height));
+            }
+            public void DrawString(string s, RenderFont f, Color c, int x, int y)
+            {
+                using var fo = F(f);
+                using var br = new System.Drawing.SolidBrush(c);
+                _g.DrawString(s ?? "", fo, br, x, y, System.Drawing.StringFormat.GenericTypographic);
+            }
+            public void DrawString(string s, RenderFont f, Color c, Rectangle r, RenderStringFormat fmt)
+            {
+                using var fo = F(f);
+                using var br = new System.Drawing.SolidBrush(c);
+                using var sf = SF(fmt);
+                _g.DrawString(s ?? "", fo, br, r, sf);
+            }
+            public void FillRectangle(Color c, Rectangle r)
+            {
+                if (r.Width <= 0 || r.Height <= 0) return;
+                using var br = new System.Drawing.SolidBrush(c);
+                _g.FillRectangle(br, r);
+            }
+            public void FillRectangle(Color c, Rectangle r, int radius)
+            {
+                if (r.Width <= 0 || r.Height <= 0) return;
+                using var br = new System.Drawing.SolidBrush(c);
+                using var p = Round(r, radius);
+                _g.FillPath(br, p);
+            }
+            public void FillGradient(Color c1, Color c2, Rectangle r)
+            {
+                if (r.Width <= 0 || r.Height <= 0) return;
+                using var br = new System.Drawing.Drawing2D.LinearGradientBrush(
+                    new Rectangle(r.X, r.Y - 1, r.Width, r.Height + 2), c1, c2, 90f);
+                _g.FillRectangle(br, r);
+            }
+            public void DrawRectangle(RenderPen pen, Rectangle r, int radius)
+            {
+                if (r.Width <= 0 || r.Height <= 0) return;
+                using var p = new System.Drawing.Pen(pen.Color, pen.Width);
+                using var path = Round(r, radius);
+                _g.DrawPath(p, path);
+            }
+            public void DrawLine(RenderPen pen, int x1, int y1, int x2, int y2)
+            {
+                using var p = new System.Drawing.Pen(pen.Color, pen.Width);
+                _g.DrawLine(p, x1, y1, x2, y2);
+            }
+            public void FillEllipse(Color c, Rectangle r)
+            {
+                if (r.Width <= 0 || r.Height <= 0) return;
+                using var br = new System.Drawing.SolidBrush(c);
+                _g.FillEllipse(br, r);
+            }
+            public void SetClip(Rectangle r) => _g.SetClip(r);
+            public void ResetClip() => _g.ResetClip();
+
+            private static System.Drawing.Drawing2D.GraphicsPath Round(Rectangle r, int radius)
+            {
+                var path = new System.Drawing.Drawing2D.GraphicsPath();
+                int d = Math.Max(0, Math.Min(radius, Math.Min(r.Width, r.Height) / 2)) * 2;
+                if (d <= 0) { path.AddRectangle(r); return path; }
+                path.AddArc(r.X, r.Y, d, d, 180, 90);
+                path.AddArc(r.Right - d, r.Y, d, d, 270, 90);
+                path.AddArc(r.Right - d, r.Bottom - d, d, d, 0, 90);
+                path.AddArc(r.X, r.Bottom - d, d, d, 90, 90);
+                path.CloseFigure();
+                return path;
+            }
+        }
+
+        // Schwebendes Fenster: zeigt die gerenderte Panel-Bitmap (1:1) + X + Interaktion.
+        private sealed class PanelWindow : System.Windows.Window
+        {
+            private readonly TradeTimer _owner;
+            private readonly System.Windows.Controls.Image _img;
+
+            public PanelWindow(TradeTimer owner)
+            {
+                _owner = owner;
+                Title = "Trade Timer";
+                WindowStyle = System.Windows.WindowStyle.None;
+                ResizeMode = System.Windows.ResizeMode.NoResize;          // kein Ziehen/Vergroessern
+                SizeToContent = System.Windows.SizeToContent.WidthAndHeight;
+                ShowInTaskbar = false;
+                AllowsTransparency = true;
+                Background = System.Windows.Media.Brushes.Transparent;
+
+                _img = new System.Windows.Controls.Image { Stretch = System.Windows.Media.Stretch.None };
+                System.Windows.Media.RenderOptions.SetBitmapScalingMode(
+                    _img, System.Windows.Media.BitmapScalingMode.NearestNeighbor);
+                Content = _img;
+
+                _img.MouseLeftButtonDown += OnImageDown;
+                _img.MouseWheel += OnImageWheel;
+            }
+
+            public void SetImage(System.Windows.Media.Imaging.BitmapSource src, int bw, int bh)
+            {
+                _img.Source = src;
+                _img.Width = bw;
+                _img.Height = bh;
+            }
+
+            private void OnImageDown(object sender, System.Windows.Input.MouseButtonEventArgs e)
+            {
+                var p = e.GetPosition(_img);
+                int mx = (int)p.X, my = (int)p.Y;
+                if (_owner._winCloseRect.Contains(mx, my))
+                {
+                    e.Handled = true;
+                    try { _owner.CloseFromWindow(); } catch { }
+                    return;
+                }
+                for (int i = 0; i < 3; i++)
+                {
+                    if (_owner._winTabRects[i].Contains(mx, my))
+                    {
+                        _owner._winTab = i;
+                        _owner._winScroll = 0;
+                        _owner.RefreshWindowUi();
+                        e.Handled = true;
+                        return;
+                    }
+                }
+                try { DragMove(); } catch { }   // sonst Fenster verschieben
+            }
+
+            private void OnImageWheel(object sender, System.Windows.Input.MouseWheelEventArgs e)
+            {
+                if (_owner._winTab != 2) return;   // nur Trades scrollen
+                _owner._winScroll = Math.Max(0, _owner._winScroll + (e.Delta > 0 ? -1 : 1));
+                _owner.RefreshWindowUi();
+                e.Handled = true;
+            }
+        }
 
         // ── Datenklassen ───────────────────────────────────────────────
         private sealed class TradeRow

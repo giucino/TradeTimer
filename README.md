@@ -45,6 +45,23 @@ Liest die fertig gematchten Round-Trips aus ATAS' `TradingStatisticsProvider`
 - **Interaktiv:** Kopfzeile **ziehen** = verschieben, **Klick** = ein-/ausklappen,
   **Mausrad** = scrollen.
 
+### Schwebendes Fenster (frei platzierbar)
+
+Optional lässt sich das Panel **zusätzlich als eigenes Fenster** öffnen (Einstellung
+**„Als Fenster öffnen"**) — z. B. auf einem **zweiten Monitor** oder **„immer im
+Vordergrund"**:
+
+- **100 % identisch zum Chart-Panel:** Fenster und Chart nutzen **denselben
+  Zeichen-Code** (`DrawStatsPanel` über eine `IPanelCanvas`-Abstraktion — Chart via
+  ATAS-`RenderContext`, Fenster via GDI+ auf eine Bitmap). Alle Ansichten, Meter,
+  Session-Punkte und Verläufe sind dadurch deckungsgleich.
+- **Live-synchron:** das Fenster wird aus `OnRender` gespiegelt → **jede
+  Einstellungsänderung** (Eval/Funded/Instant, Schwellen, Zeitraum …) wirkt sofort auf
+  Panel **und** Fenster.
+- **Bedienung:** **✕** oben rechts schließt, Reiter anklicken wechselt, **Mausrad**
+  scrollt die Trades, Klick aufs übrige Fenster verschiebt es. Größe = Panel, **kein
+  Resize**. Eigener Reiter-/Scroll-Zustand (unabhängig vom Chart-Panel).
+
 ### IQ-Capital-Regeln im Panel
 
 | Bedingung | Regel | Anzeige |
@@ -68,13 +85,14 @@ Alle Schwellen sind als Einstellung anpassbar.
 | **Timer** | Ziel-Sekunden, 15-s-Warnung, Schriftgröße, Farben, Position/Abstände |
 | **Daten & Konto** | Auswertung ab, Reset, Kontotyp, Auto-Cap/Target, Konto-/Symbol-Filter, Zeitversatz, Kommission, CSV-Export |
 | **Payout-Regeln** | Mindestlänge (15 s), Scalping-Schwelle (50 %), Sessions (10), Consistency (30 %), Profit-Split (90 %), Auszahlungs-Cap, Profit-Target, 100 %-Freibetrag |
-| **Panel** | Panel ein/aus, Schriftgröße, Abstände |
+| **Panel** | Panel ein/aus, Schriftgröße, Abstände, **Als Fenster öffnen**, **Fenster immer im Vordergrund** |
 
 ---
 
 ## Build & Deploy
 
-- **Build:** `dotnet build -c Release` (ATAS-DLLs per HintPath referenziert).
+- **Build:** `dotnet build -c Release` (ATAS-DLLs per HintPath referenziert; `net10.0-windows`
+  mit `<UseWPF>true</UseWPF>` für das schwebende Fenster).
 - **Deploy:** `TradeTimer.dll` nach **`%APPDATA%\ATAS\Indicators\`** *und*
   **`%APPDATA%\ATAS X\Indicators\`** kopieren (zwei Editionen).
 - **Hot-Reload:** ATAS lädt die DLL als Schattenkopie → die Datei lässt sich **bei

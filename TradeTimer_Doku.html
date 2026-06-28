@@ -106,18 +106,37 @@ und wertet sie für den gewählten Zeitraum und das gewählte Konto aus.
   <li><strong>Mausrad</strong> über dem Panel → Trade-Liste scrollen.</li>
 </ul>
 
+<h3>Schwebendes Fenster (frei platzierbar)</h3>
+<p>
+Über die Einstellung <strong>„Als Fenster öffnen"</strong> erscheint das Panel
+<strong>zusätzlich als eigenes Fenster</strong> — frei platzierbar (auch auf einem
+<strong>zweiten Monitor</strong>) und optional <strong>„immer im Vordergrund"</strong>.
+</p>
+<ul>
+  <li><strong>100 % identisch zum Chart-Panel:</strong> beide nutzen <em>denselben</em>
+    Zeichen-Code (<code>DrawStatsPanel</code> über eine <code>IPanelCanvas</code>-Abstraktion
+    — Chart über ATAS' <code>RenderContext</code>, Fenster über GDI+ auf eine Bitmap).
+    Alle Ansichten, Meter, Session-Punkte und Verläufe sind deckungsgleich.</li>
+  <li><strong>Live-synchron:</strong> wird aus <code>OnRender</code> gespiegelt → jede
+    Einstellungsänderung (Eval/Funded/Instant, Schwellen, Zeitraum …) wirkt sofort auf
+    Panel <strong>und</strong> Fenster.</li>
+  <li><strong>Bedienung:</strong> <strong>✕</strong> schließt, Reiter anklicken wechselt,
+    <strong>Mausrad</strong> scrollt die Trades, Klick aufs übrige Fenster verschiebt es.
+    Größe = Panel, kein Resize; eigener Reiter-/Scroll-Zustand.</li>
+</ul>
+
 <h2>Einstellungen</h2>
 <table>
   <tr><th>Gruppe</th><th>Inhalt</th></tr>
   <tr><td>Timer</td><td>Ziel-Sekunden, 15-s-Warnung, Schriftgröße, Farben, Position/Abstände</td></tr>
   <tr><td>Daten &amp; Konto</td><td>Auswertung ab, Reset, Kontotyp, Auto-Cap/Target, Konto-/Symbol-Filter, Zeitversatz, Kommission, CSV-Export</td></tr>
   <tr><td>Payout-Regeln</td><td>Mindestlänge (15 s), Scalping-Schwelle (50 %), Sessions (10), Consistency (30 %), Profit-Split (90 %), Auszahlungs-Cap, Profit-Target, 100 %-Freibetrag</td></tr>
-  <tr><td>Panel</td><td>Panel ein/aus, Schriftgröße, Abstände</td></tr>
+  <tr><td>Panel</td><td>Panel ein/aus, Schriftgröße, Abstände, <strong>Als Fenster öffnen</strong>, <strong>Fenster immer im Vordergrund</strong></td></tr>
 </table>
 
 <h2>Build &amp; Installation</h2>
 <ul>
-  <li>TargetFramework <code>net10.0-windows</code>, ATAS-DLLs per HintPath referenziert.</li>
+  <li>TargetFramework <code>net10.0-windows</code> mit <code>&lt;UseWPF&gt;true&lt;/UseWPF&gt;</code> (für das schwebende Fenster), ATAS-DLLs per HintPath referenziert.</li>
   <li><code>dotnet build -c Release</code>, dann <code>TradeTimer.dll</code> nach <code>%APPDATA%\ATAS\Indicators\</code> (und <code>%APPDATA%\ATAS X\Indicators\</code>) kopieren.</li>
   <li><strong>Hot-Reload:</strong> Die DLL lässt sich bei laufendem ATAS überschreiben; ein Klick auf den „Indikatoren neu laden"-Hinweis lädt die neue Version <strong>ohne Neustart</strong>.</li>
 </ul>
