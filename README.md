@@ -78,14 +78,21 @@ Alle Schwellen sind als Einstellung anpassbar.
 
 ---
 
-## Einstellungen (4 Gruppen)
+## Einstellungen (4 Reiter)
 
-| Gruppe | Inhalt |
+Die Einstellungen sind in **Reiter mit Untergruppen** organisiert; jede Option hat einen
+**Tooltip**, Tuning-Werte (Schwellen, Prozente, Zeiten) sind **Schieberegler**, und
+abhängige Optionen werden ausgeblendet, wenn sie nicht greifen (z. B. manuelles
+Cap/Target nur bei „Cap & Target auto" aus, Zeitversatz nur bei „Lokalzeit automatisch" aus).
+
+| Reiter | Untergruppen / Inhalt |
 |---|---|
-| **Timer** | Ziel-Sekunden, 15-s-Warnung, Schriftgröße, Farben, Position/Abstände |
-| **Daten & Konto** | Auswertung ab, Reset, Kontotyp, Auto-Cap/Target, Konto-/Symbol-Filter, Zeitversatz, Kommission, CSV-Export |
-| **Payout-Regeln** | Mindestlänge (15 s), Scalping-Schwelle (50 %), Sessions (10), Consistency (30 %), Profit-Split (90 %), Auszahlungs-Cap, Profit-Target, 100 %-Freibetrag |
-| **Panel** | Panel ein/aus, Schriftgröße, Abstände, **Als Fenster öffnen**, **Fenster immer im Vordergrund** |
+| **Timer** | *Timer* (Ziel-Sekunden, 15-s-Warnung, Schriftgröße) · *Farben* · *Position* |
+| **Auswertung** | *Zeitraum* (ab/Reset) · *Konto* (Typ, Auto-Cap/Target, Konto-/Symbol-Filter, Eval-Kennung) · *Zeit & Kosten* (Lokalzeit, Zeitversatz, Kommission) · *Export* (CSV) |
+| **Payout** | *Scalping* (Mindestlänge, Schwelle) · *Consistency & Sessions* · *Auszahlung* (Split, max %, Cap, 100 %-Freibetrag) · *Ziel* (Profit-Target) |
+| **Panel** | *Panel* (ein/aus, Schriftgröße, Abstände) · *Fenster* (Als Fenster öffnen, immer im Vordergrund) |
+
+Dazu kommen automatisch die ATAS-Standardreiter „Daten" und „Visualization".
 
 ---
 

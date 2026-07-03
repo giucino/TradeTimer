@@ -9,6 +9,7 @@ using System.Linq;
 using ATAS.DataFeedsCore;
 using ATAS.Indicators;
 using OFT.Attributes;
+using OFT.Attributes.Editors;
 using OFT.Rendering.Context;
 using OFT.Rendering.Tools;
 
@@ -156,19 +157,23 @@ namespace TradeTimer
         private RenderFont _statsFontBold;    // Titel / Badge
 
         // ── Einstellungen ──────────────────────────────────────────────
-        [Display(Name = "Ziel-Sekunden", GroupName = "Timer", Order = 1,
+        [Tab(TabName = "Timer", TabOrder = 1)]
+        [Display(Name = "Ziel-Sekunden", GroupName = "Timer", Order = 101,
                  Description = "Schwelle fuer das Timer-HUD: bis zu diesem Wert ist die Anzeige rot, " +
-                               "ab diesem Wert gruen. Steuert nur die Farbe des Haltedauer-Timers.")]
+                               "ab diesem Wert gruen. Steuert nur die Farbe des Haltedauer-Timers. (Standard: 15)")]
         [Range(1, 3600)]
+        [NumericEditor(NumericEditorTypes.TrackBar, 1.0, 300.0, Step = 1.0)]
         public int TargetSeconds
         {
             get => _targetSeconds;
             set { _targetSeconds = Math.Max(1, value); RedrawChart(); }
         }
 
-        [Display(Name = "Schriftgröße", GroupName = "Timer", Order = 3,
-                 Description = "Schriftgroesse des Timer-HUD (die MM:SS-Anzeige der aktuellen Haltedauer).")]
+        [Tab(TabName = "Timer", TabOrder = 1)]
+        [Display(Name = "Schriftgröße", GroupName = "Timer", Order = 103,
+                 Description = "Schriftgroesse des Timer-HUD (die MM:SS-Anzeige der aktuellen Haltedauer). (Standard: 16)")]
         [Range(8, 40)]
+        [NumericEditor(NumericEditorTypes.TrackBar, 8.0, 40.0, Step = 1.0)]
         public int FontSize
         {
             get => _fontSize;
@@ -180,8 +185,8 @@ namespace TradeTimer
             }
         }
 
-        // ── Farben ─────────────────────────────────────────────────────
-        [Display(Name = "Farbe unter Ziel", GroupName = "Timer", Order = 4,
+        [Tab(TabName = "Timer", TabOrder = 1)]
+        [Display(Name = "Farbe unter Ziel", GroupName = "Farben", Order = 110,
                  Description = "Textfarbe des Timers, solange die Haltedauer UNTER den Ziel-Sekunden liegt.")]
         public Color ColorBelow
         {
@@ -189,7 +194,8 @@ namespace TradeTimer
             set { _colorBelow = value; RedrawChart(); }
         }
 
-        [Display(Name = "Farbe über Ziel", GroupName = "Timer", Order = 5,
+        [Tab(TabName = "Timer", TabOrder = 1)]
+        [Display(Name = "Farbe über Ziel", GroupName = "Farben", Order = 111,
                  Description = "Textfarbe des Timers, sobald die Haltedauer die Ziel-Sekunden ERREICHT/ueberschreitet.")]
         public Color ColorAbove
         {
@@ -197,7 +203,8 @@ namespace TradeTimer
             set { _colorAbove = value; RedrawChart(); }
         }
 
-        [Display(Name = "Hintergrundfarbe", GroupName = "Timer", Order = 6,
+        [Tab(TabName = "Timer", TabOrder = 1)]
+        [Display(Name = "Hintergrundfarbe", GroupName = "Farben", Order = 112,
                  Description = "Hintergrundfarbe der Timer-Box (mit Transparenz/Alpha).")]
         public Color ColorBackground
         {
@@ -205,8 +212,8 @@ namespace TradeTimer
             set { _colorBackground = value; RedrawChart(); }
         }
 
-        // ── Position ───────────────────────────────────────────────────
-        [Display(Name = "Unten Links (aus = Unten Rechts)", GroupName = "Timer", Order = 7,
+        [Tab(TabName = "Timer", TabOrder = 1)]
+        [Display(Name = "Unten Links (aus = Unten Rechts)", GroupName = "Position", Order = 120,
                  Description = "Ecke des Timer-HUD: An = unten links, Aus = unten rechts. " +
                                "Betrifft nur den Haltedauer-Timer, nicht das Statistik-Panel.")]
         public bool BottomLeft
@@ -215,26 +222,30 @@ namespace TradeTimer
             set { _bottomLeft = value; RedrawChart(); }
         }
 
-        [Display(Name = "Abstand vom Rand X (px)", GroupName = "Timer", Order = 8,
-                 Description = "Horizontaler Abstand des Timer-HUD vom Chartrand in Pixeln.")]
+        [Tab(TabName = "Timer", TabOrder = 1)]
+        [Display(Name = "Abstand vom Rand X (px)", GroupName = "Position", Order = 121,
+                 Description = "Horizontaler Abstand des Timer-HUD vom Chartrand in Pixeln. (Standard: 20)")]
         [Range(0, 500)]
+        [NumericEditor(NumericEditorTypes.TrackBar, 0.0, 500.0, Step = 5.0)]
         public int OffsetX
         {
             get => _offsetX;
             set { _offsetX = value; RedrawChart(); }
         }
 
-        [Display(Name = "Abstand vom Rand Y (px)", GroupName = "Timer", Order = 9,
-                 Description = "Vertikaler Abstand des Timer-HUD vom unteren Chartrand in Pixeln.")]
+        [Tab(TabName = "Timer", TabOrder = 1)]
+        [Display(Name = "Abstand vom Rand Y (px)", GroupName = "Position", Order = 122,
+                 Description = "Vertikaler Abstand des Timer-HUD vom unteren Chartrand in Pixeln. (Standard: 20)")]
         [Range(0, 500)]
+        [NumericEditor(NumericEditorTypes.TrackBar, 0.0, 500.0, Step = 5.0)]
         public int OffsetY
         {
             get => _offsetY;
             set { _offsetY = value; RedrawChart(); }
         }
 
-        // ── Scalping-Auswertung ────────────────────────────────────────
-        [Display(Name = "Panel anzeigen", GroupName = "Panel", Order = 50,
+        [Tab(TabName = "Panel", TabOrder = 4)]
+        [Display(Name = "Panel anzeigen", GroupName = "Panel", Order = 401,
                  Description = "Blendet das Statistik-Panel (oben rechts) ein/aus. Der Haltedauer-Timer " +
                                "bleibt davon unberuehrt. Im Chart: Klick auf die Kopfzeile = auf/zu, " +
                                "Kopfzeile ziehen = verschieben, Mausrad = scrollen.")]
@@ -244,17 +255,20 @@ namespace TradeTimer
             set { _showStatsPanel = value; RedrawChart(); }
         }
 
-        [Display(Name = "Mindestlänge (Sek.)", GroupName = "Payout-Regeln", Order = 30,
+        [Tab(TabName = "Payout", TabOrder = 3)]
+        [Display(Name = "Mindestlänge (Sek.)", GroupName = "Scalping", Order = 301,
                  Description = "Scalping-Schwelle in Sekunden (IQ Capital: 15). Trades mit Haltedauer " +
-                               "DARUNTER zaehlen als '<15s' (Scalp), DARUEBER als '>15s' (regelkonform).")]
+                               "DARUNTER zaehlen als '<15s' (Scalp), DARUEBER als '>15s' (regelkonform). (Standard: 15)")]
         [Range(1, 3600)]
+        [NumericEditor(NumericEditorTypes.TrackBar, 1.0, 300.0, Step = 1.0)]
         public int MinTradeSeconds
         {
             get => _minTradeSeconds;
             set { _minTradeSeconds = Math.Clamp(value, 1, 3600); RecalcStats(); RedrawChart(); }
         }
 
-        [Display(Name = "Auswertung ab", GroupName = "Daten & Konto", Order = 10,
+        [Tab(TabName = "Auswertung", TabOrder = 2)]
+        [Display(Name = "Auswertung ab", GroupName = "Zeitraum", Order = 201,
                  Description = "Startzeitpunkt der Auswertung. Nur Trades, die DANACH geschlossen wurden, " +
                                "werden gezaehlt. Auf den Beginn deines Payout-Zyklus setzen.")]
         public DateTime StatsFrom
@@ -263,7 +277,8 @@ namespace TradeTimer
             set { _statsFrom = value; _historyRequested = false; RecalcStats(); RedrawChart(); }
         }
 
-        [Display(Name = "Jetzt zurücksetzen (ab = jetzt)", GroupName = "Daten & Konto", Order = 11,
+        [Tab(TabName = "Auswertung", TabOrder = 2)]
+        [Display(Name = "Jetzt zurücksetzen (ab = jetzt)", GroupName = "Zeitraum", Order = 202,
                  Description = "Setzt 'Auswertung ab' auf den aktuellen Zeitpunkt (z.B. nach einem Payout). " +
                                "Haken setzen = Reset ausloesen; springt automatisch zurueck.")]
         public bool ResetNow
@@ -279,7 +294,8 @@ namespace TradeTimer
             }
         }
 
-        [Display(Name = "Alle Symbole des Kontos", GroupName = "Daten & Konto", Order = 17,
+        [Tab(TabName = "Auswertung", TabOrder = 2)]
+        [Display(Name = "Alle Symbole des Kontos", GroupName = "Konto", Order = 214,
                  Description = "An = alle gehandelten Instrumente des Kontos zusammen (z.B. MNQ + NQ), " +
                                "passt zur kontoweiten IQ-Regel (empfohlen). Aus = nur das Symbol dieses Charts.")]
         public bool AccountWide
@@ -288,7 +304,8 @@ namespace TradeTimer
             set { _accountWide = value; _historyRequested = false; RecalcStats(); RedrawChart(); }
         }
 
-        [Display(Name = "Alle Konten zusammen", GroupName = "Daten & Konto", Order = 15,
+        [Tab(TabName = "Auswertung", TabOrder = 2)]
+        [Display(Name = "Alle Konten zusammen", GroupName = "Konto", Order = 212,
                  Description = "Aus = nur das Konto dieses Charts (empfohlen bei mehreren Konten). " +
                                "An = alle ATAS-Konten zusammengezaehlt.")]
         public bool AllAccounts
@@ -297,16 +314,19 @@ namespace TradeTimer
             set { _allAccounts = value; _historyRequested = false; RecalcStats(); RedrawChart(); }
         }
 
-        [Display(Name = "Konto-ID (leer = Chart-Konto)", GroupName = "Daten & Konto", Order = 16,
+        [Tab(TabName = "Auswertung", TabOrder = 2)]
+        [Display(Name = "Konto-ID (leer = Chart-Konto)", GroupName = "Konto", Order = 213,
                  Description = "Optional: feste Konto-ID erzwingen. Leer = automatisch das Konto, " +
                                "das fuer diesen Chart gewaehlt ist. Wirkt nur wenn 'Alle Konten' aus ist.")]
+        [VisibleWhen(nameof(AllAccounts), false)]
         public string AccountId
         {
             get => _accountId;
             set { _accountId = value?.Trim() ?? ""; _historyRequested = false; RecalcStats(); RedrawChart(); }
         }
 
-        [Display(Name = "CSV exportieren", GroupName = "Daten & Konto", Order = 21,
+        [Tab(TabName = "Auswertung", TabOrder = 2)]
+        [Display(Name = "CSV exportieren", GroupName = "Export", Order = 230,
                  Description = "Schreibt alle Trades des Zeitraums als CSV in den Downloads-Ordner " +
                                "(Spalten: Zeit, Symbol, Richtung, Dauer, Brutto, Kommission, Netto). " +
                                "Haken setzen = exportieren; springt zurueck.")]
@@ -316,9 +336,11 @@ namespace TradeTimer
             set { if (value) { ExportCsv(); RedrawChart(); } }
         }
 
-        [Display(Name = "Schriftgröße Panel", GroupName = "Panel", Order = 51,
-                 Description = "Schriftgroesse des Statistik-Panels. Kleiner = mehr Zeilen passen ohne Scrollen.")]
+        [Tab(TabName = "Panel", TabOrder = 4)]
+        [Display(Name = "Schriftgröße Panel", GroupName = "Panel", Order = 402,
+                 Description = "Schriftgroesse des Statistik-Panels. Kleiner = mehr Zeilen passen ohne Scrollen. (Standard: 13)")]
         [Range(8, 30)]
+        [NumericEditor(NumericEditorTypes.TrackBar, 8.0, 30.0, Step = 1.0)]
         public int StatsFontSize
         {
             get => _statsFontSize;
@@ -333,27 +355,32 @@ namespace TradeTimer
             }
         }
 
-        [Display(Name = "Panel-Abstand X (px)", GroupName = "Panel", Order = 52,
+        [Tab(TabName = "Panel", TabOrder = 4)]
+        [Display(Name = "Panel-Abstand X (px)", GroupName = "Panel", Order = 403,
                  Description = "Horizontaler Abstand des Statistik-Panels vom RECHTEN Chartrand. " +
-                               "Wird beim Verschieben per Drag automatisch aktualisiert.")]
+                               "Wird beim Verschieben per Drag automatisch aktualisiert. (Standard: 20)")]
         [Range(0, 1000)]
+        [NumericEditor(NumericEditorTypes.TrackBar, 0.0, 1000.0, Step = 5.0)]
         public int StatsOffsetX
         {
             get => _statsOffsetX;
             set { _statsOffsetX = value; RedrawChart(); }
         }
 
-        [Display(Name = "Panel-Abstand Y (px)", GroupName = "Panel", Order = 53,
+        [Tab(TabName = "Panel", TabOrder = 4)]
+        [Display(Name = "Panel-Abstand Y (px)", GroupName = "Panel", Order = 404,
                  Description = "Vertikaler Abstand des Statistik-Panels vom OBEREN Chartrand. " +
-                               "Wird beim Verschieben per Drag automatisch aktualisiert.")]
+                               "Wird beim Verschieben per Drag automatisch aktualisiert. (Standard: 20)")]
         [Range(0, 1000)]
+        [NumericEditor(NumericEditorTypes.TrackBar, 0.0, 1000.0, Step = 5.0)]
         public int StatsOffsetY
         {
             get => _statsOffsetY;
             set { _statsOffsetY = value; RedrawChart(); }
         }
 
-        [Display(Name = "Als Fenster öffnen", GroupName = "Panel", Order = 54,
+        [Tab(TabName = "Panel", TabOrder = 4)]
+        [Display(Name = "Als Fenster öffnen", GroupName = "Fenster", Order = 410,
                  Description = "Öffnet ZUSÄTZLICH ein schwebendes Fenster, das du frei platzieren kannst " +
                                "(auch auf einem 2. Monitor). Das Chart-Panel bleibt unabhängig davon.")]
         public bool ShowWindow
@@ -362,15 +389,18 @@ namespace TradeTimer
             set { _showWindow = value; if (!value) CloseWindow(); RedrawChart(); }
         }
 
-        [Display(Name = "Fenster immer im Vordergrund", GroupName = "Panel", Order = 55,
+        [Tab(TabName = "Panel", TabOrder = 4)]
+        [Display(Name = "Fenster immer im Vordergrund", GroupName = "Fenster", Order = 411,
                  Description = "Hält das schwebende Fenster über anderen Fenstern (Topmost).")]
+        [VisibleWhen(nameof(ShowWindow), true)]
         public bool WindowTopmost
         {
             get => _windowTopmost;
             set { _windowTopmost = value; ApplyTopmost(); }
         }
 
-        [Display(Name = "Lokalzeit automatisch", GroupName = "Daten & Konto", Order = 18,
+        [Tab(TabName = "Auswertung", TabOrder = 2)]
+        [Display(Name = "Lokalzeit automatisch", GroupName = "Zeit & Kosten", Order = 220,
                  Description = "An = ATAS-UTC wird in deine Systemzeitzone gewandelt (Sommer-/Winterzeit " +
                                "automatisch). Passt ganzjaehrig zu IQ Capital, kein manuelles Umstellen. " +
                                "Aus = fester 'Zeitversatz Std.' unten.")]
@@ -380,58 +410,69 @@ namespace TradeTimer
             set { _autoLocalTime = value; RecalcStats(); RedrawChart(); }
         }
 
-        [Display(Name = "Zeitversatz Std. (manuell)", GroupName = "Daten & Konto", Order = 19,
+        [Tab(TabName = "Auswertung", TabOrder = 2)]
+        [Display(Name = "Zeitversatz Std. (manuell)", GroupName = "Zeit & Kosten", Order = 221,
                  Description = "Fester Versatz zur ATAS-UTC-Zeit (z.B. +2 = MESZ Sommer, +1 = MEZ Winter). " +
-                               "Nur wirksam wenn 'Lokalzeit automatisch' AUS ist.")]
+                               "Nur wirksam wenn 'Lokalzeit automatisch' AUS ist. (Standard: 2)")]
         [Range(-12, 12)]
+        [NumericEditor(NumericEditorTypes.TrackBar, -12.0, 12.0, Step = 1.0)]
+        [VisibleWhen(nameof(AutoLocalTime), false)]
         public int TimeOffsetHours
         {
             get => _timeOffsetHours;
             set { _timeOffsetHours = Math.Clamp(value, -12, 12); RecalcStats(); RedrawChart(); }
         }
 
-        [Display(Name = "Scalping-Schwelle (%)", GroupName = "Payout-Regeln", Order = 31,
+        [Tab(TabName = "Payout", TabOrder = 3)]
+        [Display(Name = "Scalping-Schwelle (%)", GroupName = "Scalping", Order = 302,
                  Description = "IQ-Capital-Regel: Payout nur erlaubt, wenn >= dieser Anteil der TRADES " +
                                "laenger als die Mindestlaenge war UND >= dieser Anteil der PROFITE aus " +
-                               "diesen Trades stammt. Standard 50.")]
+                               "diesen Trades stammt. (Standard: 50)")]
         [Range(0, 100)]
+        [NumericEditor(NumericEditorTypes.TrackBar, 0.0, 100.0, Step = 1.0)]
         public int PayoutThresholdPct
         {
             get => _payoutThresholdPct;
             set { _payoutThresholdPct = Math.Clamp(value, 0, 100); RedrawChart(); }
         }
 
-        [Display(Name = "Benötigte Sessions", GroupName = "Payout-Regeln", Order = 32,
+        [Tab(TabName = "Payout", TabOrder = 3)]
+        [Display(Name = "Benötigte Sessions", GroupName = "Consistency & Sessions", Order = 310,
                  Description = "Aktive Handelstage bis zur ersten Auszahlung (IQ: 10). Das Panel zaehlt " +
-                               "die unterschiedlichen Handelstage im Zeitraum und zeigt X/Soll.")]
+                               "die unterschiedlichen Handelstage im Zeitraum und zeigt X/Soll. (Standard: 10)")]
         [Range(1, 100)]
+        [NumericEditor(NumericEditorTypes.TrackBar, 1.0, 60.0, Step = 1.0)]
         public int RequiredSessions
         {
             get => _requiredSessions;
             set { _requiredSessions = Math.Clamp(value, 1, 100); RedrawChart(); }
         }
 
-        [Display(Name = "Consistency Best-Day (%)", GroupName = "Payout-Regeln", Order = 33,
+        [Tab(TabName = "Payout", TabOrder = 3)]
+        [Display(Name = "Consistency Best-Day (%)", GroupName = "Consistency & Sessions", Order = 311,
                  Description = "Consistency-Regel (nur Funded): der beste einzelne Handelstag darf hoechstens " +
-                               "diesen Anteil am Gesamtprofit ausmachen (IQ Funded Futures: 30).")]
+                               "diesen Anteil am Gesamtprofit ausmachen (IQ Funded Futures: 30). (Standard: 30)")]
         [Range(1, 100)]
+        [NumericEditor(NumericEditorTypes.TrackBar, 1.0, 100.0, Step = 1.0)]
         public int ConsistencyPct
         {
             get => _consistencyPct;
             set { _consistencyPct = Math.Clamp(value, 1, 100); RedrawChart(); }
         }
 
-        [Display(Name = "Cap & Target auto (Kontogröße)", GroupName = "Daten & Konto", Order = 13,
+        [Tab(TabName = "Auswertung", TabOrder = 2)]
+        [Display(Name = "Cap & Target auto (Kontogröße)", GroupName = "Konto", Order = 215,
                  Description = "An = Max-Auszahlung (Cap) und Eval-Profit-Target werden automatisch aus der " +
                                "Kontogröße in der Konto-ID gesetzt: 50K→Target 3.000/Cap 1.500, " +
-                               "100K→6.000/2.000, 200K→12.000/2.500. Aus = manuelle Werte unten benutzen.")]
+                               "100K→6.000/2.000, 200K→12.000/2.500. Aus = manuelle Werte im Reiter Payout.")]
         public bool AutoTier
         {
             get => _autoTier;
             set { _autoTier = value; RedrawChart(); }
         }
 
-        [Display(Name = "Kontotyp", GroupName = "Daten & Konto", Order = 12,
+        [Tab(TabName = "Auswertung", TabOrder = 2)]
+        [Display(Name = "Kontotyp", GroupName = "Konto", Order = 210,
                  Description = "Auto = automatisch an der Konto-ID erkannt (IQFEV.. = Evaluation, " +
                                "IQFIF.. = Instant Funding, sonst Funded). Evaluation zeigt das Profit-Target; " +
                                "Funded und Instant Funding zeigen den Payout-Check (Sessions + Consistency).")]
@@ -441,56 +482,68 @@ namespace TradeTimer
             set { _accountType = value; RedrawChart(); }
         }
 
-        [Display(Name = "Evaluation-Kennung (Konto-ID)", GroupName = "Daten & Konto", Order = 14,
+        [Tab(TabName = "Auswertung", TabOrder = 2)]
+        [Display(Name = "Evaluation-Kennung (Konto-ID)", GroupName = "Konto", Order = 211,
                  Description = "Teilzeichenfolge in der Konto-ID, die ein Evaluation-Konto kennzeichnet " +
                                "(Standard 'EV', z.B. IQFEV100K). Nur relevant bei Kontotyp = Auto.")]
+        [VisibleWhen(nameof(AccountType), AccountKind.Auto)]
         public string EvalKeyword
         {
             get => _evalKeyword;
             set { _evalKeyword = value?.Trim() ?? ""; RedrawChart(); }
         }
 
-        [Display(Name = "Profit-Target Eval (USD)", GroupName = "Payout-Regeln", Order = 37,
+        [Tab(TabName = "Payout", TabOrder = 3)]
+        [Display(Name = "Profit-Target Eval (USD)", GroupName = "Ziel", Order = 330,
                  Description = "Profit-Ziel der Evaluation (Standard 6000; je nach Tier anpassen). " +
-                               "Wird im Evaluation-Modus als Fortschritt angezeigt.")]
+                               "Wird im Evaluation-Modus als Fortschritt angezeigt. Nur wirksam wenn " +
+                               "'Cap & Target auto' AUS ist.")]
         [Range(0, 1000000)]
+        [VisibleWhen(nameof(AutoTier), false)]
         public int ProfitTarget
         {
             get => (int)_profitTarget;
             set { _profitTarget = Math.Max(0, value); RedrawChart(); }
         }
 
-        [Display(Name = "Profit-Split (%)", GroupName = "Payout-Regeln", Order = 34,
+        [Tab(TabName = "Payout", TabOrder = 3)]
+        [Display(Name = "Profit-Split (%)", GroupName = "Auszahlung", Order = 320,
                  Description = "Dein Anteil am Profit fuer die Auszahlungs-Schaetzung (IQ: 90). " +
-                               "Geschaetzt auszahlbar = Netto-Profit x Split (ueber dem 100%-Freibetrag).")]
+                               "Geschaetzt auszahlbar = Netto-Profit x Split (ueber dem 100%-Freibetrag). (Standard: 90)")]
         [Range(0, 100)]
+        [NumericEditor(NumericEditorTypes.TrackBar, 0.0, 100.0, Step = 1.0)]
         public int ProfitSplitPct
         {
             get => _profitSplitPct;
             set { _profitSplitPct = Math.Clamp(value, 0, 100); RedrawChart(); }
         }
 
-        [Display(Name = "Auszahlung max % der Profite", GroupName = "Payout-Regeln", Order = 35,
-                 Description = "IQ-Regel: pro Auszahlung max. dieser Anteil der Gesamtprofite (Standard 50). " +
-                               "Fliesst in die 'auszahlbar'-Schaetzung ein.")]
+        [Tab(TabName = "Payout", TabOrder = 3)]
+        [Display(Name = "Auszahlung max % der Profite", GroupName = "Auszahlung", Order = 321,
+                 Description = "IQ-Regel: pro Auszahlung max. dieser Anteil der Gesamtprofite. " +
+                               "Fliesst in die 'auszahlbar'-Schaetzung ein. (Standard: 50)")]
         [Range(1, 100)]
+        [NumericEditor(NumericEditorTypes.TrackBar, 1.0, 100.0, Step = 1.0)]
         public int WithdrawCapPct
         {
             get => _withdrawCapPct;
             set { _withdrawCapPct = Math.Clamp(value, 1, 100); RedrawChart(); }
         }
 
-        [Display(Name = "Max. Auszahlung (USD, 0=aus)", GroupName = "Payout-Regeln", Order = 36,
+        [Tab(TabName = "Payout", TabOrder = 3)]
+        [Display(Name = "Max. Auszahlung (USD, 0=aus)", GroupName = "Auszahlung", Order = 322,
                  Description = "Account-Cap pro Auszahlung (IQ: 100k=2000, 50k=1500). Deckelt die " +
-                               "'auszahlbar'-Schaetzung. 0 = kein Cap.")]
+                               "'auszahlbar'-Schaetzung. 0 = kein Cap. Nur wirksam wenn 'Cap & Target auto' AUS ist.")]
         [Range(0, 1000000)]
+        [VisibleWhen(nameof(AutoTier), false)]
         public int MaxPayout
         {
             get => (int)_maxPayout;
             set { _maxPayout = Math.Max(0, value); RedrawChart(); }
         }
 
-        [Display(Name = "100%-Freibetrag (USD, 0=aus)", GroupName = "Payout-Regeln", Order = 38,
+        [Tab(TabName = "Payout", TabOrder = 3)]
+        [Display(Name = "100%-Freibetrag (USD, 0=aus)", GroupName = "Auszahlung", Order = 323,
                  Description = "OPTIONAL: erste X USD der Auszahlungsbasis zu 100% (statt Split). Steht NICHT " +
                                "in den offiziellen IQ-Auszahlungsregeln (dort flat 90%); nur falls dein Konto " +
                                "das hat. 0 = aus (empfohlen).")]
@@ -501,7 +554,8 @@ namespace TradeTimer
             set { _hundredPctAllowance = Math.Max(0, value); RedrawChart(); }
         }
 
-        [Display(Name = "Timer-Warnung unter Mindestlänge", GroupName = "Timer", Order = 2,
+        [Tab(TabName = "Timer", TabOrder = 1)]
+        [Display(Name = "Timer-Warnung unter Mindestlänge", GroupName = "Timer", Order = 102,
                  Description = "An = der Haltedauer-Timer ist rot mit '!' solange die offene Position " +
                                "unter der Scalping-Mindestlaenge ist, und wird erst darueber gruen. " +
                                "Hilft, Trades nicht zu frueh zu schliessen. Aus = nutzt 'Ziel-Sekunden'.")]
@@ -511,7 +565,8 @@ namespace TradeTimer
             set { _timerScalpWarn = value; RedrawChart(); }
         }
 
-        [Display(Name = "Kommission abziehen (Netto-PnL)", GroupName = "Daten & Konto", Order = 20,
+        [Tab(TabName = "Auswertung", TabOrder = 2)]
+        [Display(Name = "Kommission abziehen (Netto-PnL)", GroupName = "Zeit & Kosten", Order = 222,
                  Description = "An = PnL netto (Brutto minus Kommission je Trade). Aus = Brutto-PnL " +
                                "ohne Kommission. Zum Abgleich mit IQ Capital ggf. umschalten.")]
         public bool SubtractCommission
