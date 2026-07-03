@@ -81,7 +81,8 @@ Alle Schwellen sind als Einstellung anpassbar.
 ## Einstellungen (4 Reiter)
 
 Die Einstellungen sind in **Reiter mit Untergruppen** organisiert; jede Option hat einen
-**Tooltip**, Tuning-Werte (Schwellen, Prozente, Zeiten) sind **Schieberegler**, und
+**Tooltip**, ausgewählte Werte (Timer-Sekunden, Schrift, Position, Zeitversatz) sind
+**Schieberegler** (Regeln/Beträge tippt man direkt als Zahl), und
 abhängige Optionen werden ausgeblendet, wenn sie nicht greifen (z. B. manuelles
 Cap/Target nur bei „Cap & Target auto" aus, Zeitversatz nur bei „Lokalzeit automatisch" aus).
 

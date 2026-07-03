@@ -260,7 +260,6 @@ namespace TradeTimer
                  Description = "Scalping-Schwelle in Sekunden (IQ Capital: 15). Trades mit Haltedauer " +
                                "DARUNTER zaehlen als '<15s' (Scalp), DARUEBER als '>15s' (regelkonform). (Standard: 15)")]
         [Range(1, 3600)]
-        [NumericEditor(NumericEditorTypes.TrackBar, 1.0, 300.0, Step = 1.0)]
         public int MinTradeSeconds
         {
             get => _minTradeSeconds;
@@ -340,7 +339,6 @@ namespace TradeTimer
         [Display(Name = "Schriftgröße Panel", GroupName = "Panel", Order = 402,
                  Description = "Schriftgroesse des Statistik-Panels. Kleiner = mehr Zeilen passen ohne Scrollen. (Standard: 13)")]
         [Range(8, 30)]
-        [NumericEditor(NumericEditorTypes.TrackBar, 8.0, 30.0, Step = 1.0)]
         public int StatsFontSize
         {
             get => _statsFontSize;
@@ -360,7 +358,6 @@ namespace TradeTimer
                  Description = "Horizontaler Abstand des Statistik-Panels vom RECHTEN Chartrand. " +
                                "Wird beim Verschieben per Drag automatisch aktualisiert. (Standard: 20)")]
         [Range(0, 1000)]
-        [NumericEditor(NumericEditorTypes.TrackBar, 0.0, 1000.0, Step = 5.0)]
         public int StatsOffsetX
         {
             get => _statsOffsetX;
@@ -372,7 +369,6 @@ namespace TradeTimer
                  Description = "Vertikaler Abstand des Statistik-Panels vom OBEREN Chartrand. " +
                                "Wird beim Verschieben per Drag automatisch aktualisiert. (Standard: 20)")]
         [Range(0, 1000)]
-        [NumericEditor(NumericEditorTypes.TrackBar, 0.0, 1000.0, Step = 5.0)]
         public int StatsOffsetY
         {
             get => _statsOffsetY;
@@ -429,7 +425,6 @@ namespace TradeTimer
                                "laenger als die Mindestlaenge war UND >= dieser Anteil der PROFITE aus " +
                                "diesen Trades stammt. (Standard: 50)")]
         [Range(0, 100)]
-        [NumericEditor(NumericEditorTypes.TrackBar, 0.0, 100.0, Step = 1.0)]
         public int PayoutThresholdPct
         {
             get => _payoutThresholdPct;
@@ -441,7 +436,6 @@ namespace TradeTimer
                  Description = "Aktive Handelstage bis zur ersten Auszahlung (IQ: 10). Das Panel zaehlt " +
                                "die unterschiedlichen Handelstage im Zeitraum und zeigt X/Soll. (Standard: 10)")]
         [Range(1, 100)]
-        [NumericEditor(NumericEditorTypes.TrackBar, 1.0, 60.0, Step = 1.0)]
         public int RequiredSessions
         {
             get => _requiredSessions;
@@ -453,7 +447,6 @@ namespace TradeTimer
                  Description = "Consistency-Regel (nur Funded): der beste einzelne Handelstag darf hoechstens " +
                                "diesen Anteil am Gesamtprofit ausmachen (IQ Funded Futures: 30). (Standard: 30)")]
         [Range(1, 100)]
-        [NumericEditor(NumericEditorTypes.TrackBar, 1.0, 100.0, Step = 1.0)]
         public int ConsistencyPct
         {
             get => _consistencyPct;
@@ -511,7 +504,6 @@ namespace TradeTimer
                  Description = "Dein Anteil am Profit fuer die Auszahlungs-Schaetzung (IQ: 90). " +
                                "Geschaetzt auszahlbar = Netto-Profit x Split (ueber dem 100%-Freibetrag). (Standard: 90)")]
         [Range(0, 100)]
-        [NumericEditor(NumericEditorTypes.TrackBar, 0.0, 100.0, Step = 1.0)]
         public int ProfitSplitPct
         {
             get => _profitSplitPct;
@@ -523,7 +515,6 @@ namespace TradeTimer
                  Description = "IQ-Regel: pro Auszahlung max. dieser Anteil der Gesamtprofite. " +
                                "Fliesst in die 'auszahlbar'-Schaetzung ein. (Standard: 50)")]
         [Range(1, 100)]
-        [NumericEditor(NumericEditorTypes.TrackBar, 1.0, 100.0, Step = 1.0)]
         public int WithdrawCapPct
         {
             get => _withdrawCapPct;
