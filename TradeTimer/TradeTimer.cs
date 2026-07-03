@@ -1559,8 +1559,49 @@ namespace TradeTimer
             => string.IsNullOrEmpty(s) ? "" : (s.Length <= max ? s : s.Substring(0, max));
 
         // ── Schwebendes Fenster (pixelgleicher Spiegel des Chart-Panels) ──
+        // ATAS (WPF) hat eine Application.Current -> deren UI-Thread nutzen.
+        // ATAS X hat u.U. KEINE WPF-Application -> dann eigener STA-UI-Thread,
+        // damit das Fenster in BEIDEN Editionen funktioniert.
+        private static System.Windows.Threading.Dispatcher? _ownDispatcher;
+        private static readonly object _dispLock = new();
+
         private static System.Windows.Threading.Dispatcher? UiDisp
-            => System.Windows.Application.Current?.Dispatcher;
+            => System.Windows.Application.Current?.Dispatcher ?? EnsureOwnDispatcher();
+
+        private static System.Windows.Threading.Dispatcher EnsureOwnDispatcher()
+        {
+            if (_ownDispatcher != null) return _ownDispatcher;
+            lock (_dispLock)
+            {
+                if (_ownDispatcher != null) return _ownDispatcher;
+                var ready = new System.Threading.ManualResetEventSlim(false);
+                System.Windows.Threading.Dispatcher? d = null;
+                var t = new System.Threading.Thread(() =>
+                {
+                    try
+                    {
+                        // Minimale WPF-Application, falls der Host keine hat
+                        // (Ressourcen/Transparenz). Nur wenn wirklich keine da ist.
+                        if (System.Windows.Application.Current == null)
+                            _ = new System.Windows.Application
+                            { ShutdownMode = System.Windows.ShutdownMode.OnExplicitShutdown };
+                    }
+                    catch { }
+                    d = System.Windows.Threading.Dispatcher.CurrentDispatcher;
+                    ready.Set();
+                    System.Windows.Threading.Dispatcher.Run();
+                })
+                {
+                    IsBackground = true,
+                    Name = "TradeTimerWindowUI"
+                };
+                t.SetApartmentState(System.Threading.ApartmentState.STA);
+                t.Start();
+                ready.Wait();
+                _ownDispatcher = d;
+                return _ownDispatcher!;
+            }
+        }
 
         private void ApplyTopmost()
             => UiDisp?.BeginInvoke(new Action(() => { try { if (_window != null) _window.Topmost = _windowTopmost; } catch { } }));
