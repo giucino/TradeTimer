@@ -78,7 +78,7 @@ Alle Schwellen sind als Einstellung anpassbar.
 
 ---
 
-## Einstellungen (4 Reiter)
+## Einstellungen (3 Reiter)
 
 Die Einstellungen sind in **Reiter mit Untergruppen** organisiert; jede Option hat einen
 **Tooltip**, Werte werden direkt als Zahl eingegeben (nur der **Zeitversatz** ist ein
@@ -88,10 +88,9 @@ Cap/Target nur bei „Cap & Target auto" aus, Zeitversatz nur bei „Lokalzeit a
 
 | Reiter | Untergruppen / Inhalt |
 |---|---|
-| **Timer** | *Timer* (Ziel-Sekunden, 15-s-Warnung, Schriftgröße) · *Farben* · *Position* |
+| **Timer** | *Timer* (Ziel-Sekunden, 15-s-Warnung, Schriftgröße) · *Farben* · *Position* · *Panel* (ein/aus, Schriftgröße, Abstände) · *Fenster* (Als Fenster öffnen, immer im Vordergrund) |
 | **Auswertung** | *Zeitraum* (ab/Reset) · *Konto* (Typ, Auto-Cap/Target, Konto-/Symbol-Filter, Eval-Kennung) · *Zeit & Kosten* (Lokalzeit, Zeitversatz, Kommission) · *Export* (CSV) |
 | **Payout** | *Scalping* (Mindestlänge, Schwelle) · *Consistency & Sessions* · *Auszahlung* (Split, max %, Cap, 100 %-Freibetrag) · *Ziel* (Profit-Target) |
-| **Panel** | *Panel* (ein/aus, Schriftgröße, Abstände) · *Fenster* (Als Fenster öffnen, immer im Vordergrund) |
 
 Dazu kommen automatisch die ATAS-Standardreiter „Daten" und „Visualization".
 

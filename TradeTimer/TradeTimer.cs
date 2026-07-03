@@ -240,7 +240,7 @@ namespace TradeTimer
             set { _offsetY = value; RedrawChart(); }
         }
 
-        [Tab(TabName = "Panel", TabOrder = 4)]
+        [Tab(TabName = "Timer", TabOrder = 1)]
         [Display(Name = "Panel anzeigen", GroupName = "Panel", Order = 401,
                  Description = "Blendet das Statistik-Panel (oben rechts) ein/aus. Der Haltedauer-Timer " +
                                "bleibt davon unberuehrt. Im Chart: Klick auf die Kopfzeile = auf/zu, " +
@@ -331,7 +331,7 @@ namespace TradeTimer
             set { if (value) { ExportCsv(); RedrawChart(); } }
         }
 
-        [Tab(TabName = "Panel", TabOrder = 4)]
+        [Tab(TabName = "Timer", TabOrder = 1)]
         [Display(Name = "Schriftgröße Panel", GroupName = "Panel", Order = 402,
                  Description = "Schriftgroesse des Statistik-Panels. Kleiner = mehr Zeilen passen ohne Scrollen. (Standard: 13)")]
         [Range(8, 30)]
@@ -349,7 +349,7 @@ namespace TradeTimer
             }
         }
 
-        [Tab(TabName = "Panel", TabOrder = 4)]
+        [Tab(TabName = "Timer", TabOrder = 1)]
         [Display(Name = "Panel-Abstand X (px)", GroupName = "Panel", Order = 403,
                  Description = "Horizontaler Abstand des Statistik-Panels vom RECHTEN Chartrand. " +
                                "Wird beim Verschieben per Drag automatisch aktualisiert. (Standard: 20)")]
@@ -360,7 +360,7 @@ namespace TradeTimer
             set { _statsOffsetX = value; RedrawChart(); }
         }
 
-        [Tab(TabName = "Panel", TabOrder = 4)]
+        [Tab(TabName = "Timer", TabOrder = 1)]
         [Display(Name = "Panel-Abstand Y (px)", GroupName = "Panel", Order = 404,
                  Description = "Vertikaler Abstand des Statistik-Panels vom OBEREN Chartrand. " +
                                "Wird beim Verschieben per Drag automatisch aktualisiert. (Standard: 20)")]
@@ -371,7 +371,7 @@ namespace TradeTimer
             set { _statsOffsetY = value; RedrawChart(); }
         }
 
-        [Tab(TabName = "Panel", TabOrder = 4)]
+        [Tab(TabName = "Timer", TabOrder = 1)]
         [Display(Name = "Als Fenster öffnen", GroupName = "Fenster", Order = 410,
                  Description = "Öffnet ZUSÄTZLICH ein schwebendes Fenster, das du frei platzieren kannst " +
                                "(auch auf einem 2. Monitor). Das Chart-Panel bleibt unabhängig davon.")]
@@ -381,7 +381,7 @@ namespace TradeTimer
             set { _showWindow = value; if (!value) CloseWindow(); RedrawChart(); }
         }
 
-        [Tab(TabName = "Panel", TabOrder = 4)]
+        [Tab(TabName = "Timer", TabOrder = 1)]
         [Display(Name = "Fenster immer im Vordergrund", GroupName = "Fenster", Order = 411,
                  Description = "Hält das schwebende Fenster über anderen Fenstern (Topmost).")]
         [VisibleWhen(nameof(ShowWindow), true)]
