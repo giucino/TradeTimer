@@ -162,7 +162,6 @@ namespace TradeTimer
                  Description = "Schwelle fuer das Timer-HUD: bis zu diesem Wert ist die Anzeige rot, " +
                                "ab diesem Wert gruen. Steuert nur die Farbe des Haltedauer-Timers. (Standard: 15)")]
         [Range(1, 3600)]
-        [NumericEditor(NumericEditorTypes.TrackBar, 1.0, 300.0, Step = 1.0)]
         public int TargetSeconds
         {
             get => _targetSeconds;
@@ -173,7 +172,6 @@ namespace TradeTimer
         [Display(Name = "Schriftgröße", GroupName = "Timer", Order = 103,
                  Description = "Schriftgroesse des Timer-HUD (die MM:SS-Anzeige der aktuellen Haltedauer). (Standard: 16)")]
         [Range(8, 40)]
-        [NumericEditor(NumericEditorTypes.TrackBar, 8.0, 40.0, Step = 1.0)]
         public int FontSize
         {
             get => _fontSize;
@@ -226,7 +224,6 @@ namespace TradeTimer
         [Display(Name = "Abstand vom Rand X (px)", GroupName = "Position", Order = 121,
                  Description = "Horizontaler Abstand des Timer-HUD vom Chartrand in Pixeln. (Standard: 20)")]
         [Range(0, 500)]
-        [NumericEditor(NumericEditorTypes.TrackBar, 0.0, 500.0, Step = 5.0)]
         public int OffsetX
         {
             get => _offsetX;
@@ -237,7 +234,6 @@ namespace TradeTimer
         [Display(Name = "Abstand vom Rand Y (px)", GroupName = "Position", Order = 122,
                  Description = "Vertikaler Abstand des Timer-HUD vom unteren Chartrand in Pixeln. (Standard: 20)")]
         [Range(0, 500)]
-        [NumericEditor(NumericEditorTypes.TrackBar, 0.0, 500.0, Step = 5.0)]
         public int OffsetY
         {
             get => _offsetY;
