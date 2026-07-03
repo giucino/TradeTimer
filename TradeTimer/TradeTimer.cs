@@ -935,9 +935,17 @@ namespace TradeTimer
             if (_showStatsPanel)
                 DrawStatsPanel(new AtasCanvas(context), context.ClipBounds.Width, context.ClipBounds.Height,
                                -1, -1, _collapsed, _activeTab, ref _scrollOffset);
-            DrawTimer(context);
-            if (_showWindow)
-                RenderWindow(false);   // schwebendes Fenster aus demselben Zeichen-Code spiegeln
+
+            // Live-Timer NUR auf der Final-Ebene: die Historical-Ebene ist gecacht und
+            // aktualisiert nicht je Tick -> dort bliebe ein veraltetes Pill stehen. Beim
+            // Wechsel rot<->gruen aendert sich durch das '!' die Breite/Position, sodass
+            // altes (rot) und neues (gruen) Pill sichtbar ueberlappen wuerden.
+            if (layout == DrawingLayouts.Final)
+            {
+                DrawTimer(context);
+                if (_showWindow)
+                    RenderWindow(false);   // schwebendes Fenster aus demselben Zeichen-Code spiegeln
+            }
         }
 
         // Live-Timer als runde Pill mit Fortschritts-Ring zur Scalping-Schwelle.
